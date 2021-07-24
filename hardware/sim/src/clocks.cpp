@@ -31,6 +31,8 @@ void Clock::advance_time(uint32_t increment) {
     } else {
         this->time_to_next_edge -= increment;
     }
+
+    return;
 }
 
 Clocks::Clocks() {
@@ -41,6 +43,8 @@ Clocks::~Clocks() {
 
 void Clocks::add_clock(std::string name, std::shared_ptr<Clock> clock) {
     this->clocks.insert(std::pair<std::string, std::shared_ptr<Clock>>(name, clock));
+    
+    return;
 }
 
 uint32_t Clocks::next_edge() {

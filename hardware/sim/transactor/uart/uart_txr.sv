@@ -40,11 +40,11 @@ module uart_txr #(
         .io_uart_rx_serial(uart_i_rx),
         .io_uart_rx_data_ready(uart_i_rx_data_ready),
         .io_uart_rx_data_valid(uart_o_rx_data_valid),
-        .io_uart_rx_data_bits(uart_o_rx_data),
+        .io_uart_rx_data_bits_tdata(uart_o_rx_data),
         .io_uart_tx_serial(uart_o_tx),
         .io_uart_tx_data_ready(uart_o_tx_data_ready),
         .io_uart_tx_data_valid(uart_i_tx_data_valid),
-        .io_uart_tx_data_bits(uart_i_tx_data)
+        .io_uart_tx_data_bits_tdata(uart_i_tx_data)
     );
     
     assign uart_i_rx = i_uart_rx;

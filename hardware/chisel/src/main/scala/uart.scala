@@ -10,7 +10,12 @@ class UARTSerial extends Bundle {
 
 class UARTHalf extends Bundle {
     val serial = Input(UInt(1.W))
-    val data = Decoupled(UInt(8.W))
+    val data = Decoupled(new AXIStream(DATA_WIDTH = 8,
+                                       KEEP_EN = false,
+                                       LAST_EN = false,
+                                       ID_WIDTH = 0,
+                                       DEST_WIDTH = 0,
+                                       USER_WIDTH = 0))
 }
 
 class UARTInterface extends Bundle {
@@ -77,7 +82,7 @@ class UARTReceiver(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module 
     }
     
     io.rx.data.valid := valid && ~started
-    io.rx.data.bits := shift(8, 1)
+    io.rx.data.bits.tdata := shift(8, 1)
 }
 
 class UARTTransmitter(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module {
@@ -107,7 +112,7 @@ class UARTTransmitter(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Modu
     
     when (start) {
         bit_counter := 10.U
-        shift := Cat(1.U(1.W), io.tx.data.bits, 0.U(1.W))
+        shift := Cat(1.U(1.W), io.tx.data.bits.tdata, 0.U(1.W))
     } .elsewhen (symbol && started) {
         bit_counter := bit_counter - 1.U
         shift := Cat(1.U(1.W), shift(9, 1))

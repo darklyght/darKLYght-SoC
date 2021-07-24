@@ -40,6 +40,7 @@ char uart_tx_data(void* port) {
 }
 
 void uart_rx(void* port, char data) {
+    printf("%02X\n", data);
     int val = write(((uart_pty_t*)port)->master, &data, 1);
     (void) val;
     return;
