@@ -34,20 +34,17 @@ module uart_txr #(
     wire uart_o_tx_data_ready;
     reg uart_i_tx_data_valid;
     
-    uart #(
-        .CLOCK_FREQUENCY(100000000),
-        .BAUD_RATE(115200)
-    ) uart (
-        .i_clock(i_clock),
-        .i_reset(i_reset),
-        .i_rx(uart_i_rx),
-        .o_rx_data(uart_o_rx_data),
-        .i_rx_data_ready(uart_i_rx_data_ready),
-        .o_rx_data_valid(uart_o_rx_data_valid),
-        .o_tx(uart_o_tx),
-        .i_tx_data(uart_i_tx_data),
-        .o_tx_data_ready(uart_o_tx_data_ready),
-        .i_tx_data_valid(uart_i_tx_data_valid)
+    UARTDriver uart (
+        .clock(i_clock),
+        .reset(i_reset),
+        .io_uart_rx_serial(uart_i_rx),
+        .io_uart_rx_data_ready(uart_i_rx_data_ready),
+        .io_uart_rx_data_valid(uart_o_rx_data_valid),
+        .io_uart_rx_data_bits(uart_o_rx_data),
+        .io_uart_tx_serial(uart_o_tx),
+        .io_uart_tx_data_ready(uart_o_tx_data_ready),
+        .io_uart_tx_data_valid(uart_i_tx_data_valid),
+        .io_uart_tx_data_bits(uart_i_tx_data)
     );
     
     assign uart_i_rx = i_uart_rx;
