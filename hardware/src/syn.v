@@ -9,10 +9,11 @@ module syn (
 
     assign reset = ~i_reset_n;
 
-    wire top_clock;
+    wire top_clock_int;
     wire top_clock_fbin;
     wire top_clock_fbout;
     wire top_clock_locked;
+    wire top_clock;
 
     MMCME2_BASE #(
         .BANDWIDTH("OPTIMIZED"),
@@ -28,7 +29,7 @@ module syn (
     ) top_clock_mmcm (
         .CLKFBOUT(top_clock_fbout),
         .CLKFBOUTB(),
-        .CLKOUT0(top_clock),
+        .CLKOUT0(top_clock_int),
         .CLKOUT0B(),
         .CLKFBIN(top_clock_fbin),
         .CLKIN1(i_clock),
@@ -37,9 +38,14 @@ module syn (
         .RST(reset)
     );
 
-    BUFG top_clock_bufg (
+    BUFG top_clock_fb_bufg (
         .I(top_clock_fbout),
         .O(top_clock_fbin)
+    );
+
+    BUFG top_clock_bufg (
+        .I(top_clock_int),
+        .O(top_clock)
     );
 
     top top (
