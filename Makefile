@@ -4,7 +4,7 @@ HARD_SBT_DIR = $(ROOT)/hardware/chisel
 HARD_SBT_LIST = $(wildcard ${HARD_SBT_DIR}/src/main/scala/*.scala)
 
 HARD_SRC_DIR = $(ROOT)/hardware/src
-HARD_SRC_LIST = $(wildcard ${HARD_SRC_DIR}/*/*.v)
+HARD_SRC_LIST = $(HARD_SRC_DIR)/hdl/top.v
 
 HARD_SIM_DIR = $(ROOT)/hardware/sim
 HARD_SIM_LIST = ${HARD_SIM_DIR}/tb.sv $(wildcard ${HARD_SIM_DIR}/transactor/*/*.v) $(wildcard ${HARD_SIM_DIR}/transactor/*/*.sv) $(wildcard ${HARD_SIM_DIR}/transactor/*/*.c)
@@ -27,27 +27,26 @@ $(HARD_SRC_DIR)/hdl/top.v: $(HARD_SBT_LIST)
 sbt: $(HARD_SRC_DIR)/hdl/top.v
 
 sim: $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(HARD_SIM_CLIST)
-	$(VERILATOR_BIN) -LDFLAGS "-lutil" -CFLAGS "-I${HARD_SIM_DIR}/include" --cc --trace-fst $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SIM_LIST) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include --top-module tb --exe $(HARD_SIM_CLIST) --build
+	$(VERILATOR_BIN) -LDFLAGS "-lutil" -CFLAGS "-I${HARD_SIM_DIR}/include" --cc --trace-fst $(HARD_SRC_LIST) $(HARD_SIM_LIST) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include --top-module tb --exe $(HARD_SIM_CLIST) --build
 	cd $(HARD_SIM_DIR)/build/ && ./Vtb
 
-$(HARD_BUILD_DIR)/post_synth.dcp: $(HARD_SRC_DIR)/syn.v $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SYN_CON) $(HARD_SYN_TCL)
+$(HARD_BUILD_DIR)/post_synth.dcp: $(HARD_SRC_DIR)/syn.v $(HARD_SRC_LIST) $(HARD_SYN_CON) $(HARD_SYN_TCL)
 	$(VIVADO_BIN) -mode batch -source $(HARD_SYN_TCL) -tclargs $(ROOT) | tee $(HARD_BUILD_DIR)/syn.log
 
 syn: $(HARD_BUILD_DIR)/post_synth.dcp
 
-$(HARD_BUILD_DIR)/post_route.dcp: $(HARD_BUILD_DIR)/post_synth.dcp $(HARD_PNR_TCL)
+$(HARD_BUILD_DIR)/top.bit: $(HARD_BUILD_DIR)/post_synth.dcp $(HARD_PNR_TCL)
 	$(VIVADO_BIN) -mode batch -source $(HARD_PNR_TCL) -tclargs $(ROOT) | tee $(HARD_BUILD_DIR)/pnr.log
 
-pnr: $(BUILD_HARD)/post_route.dcp
+pnr: $(HARD_BUILD_DIR)/top.bit
 
-$(HARD_BUILD_DIR)/top.bit: $(HARD_BUILD_DIR)/post_route.dcp
+program: pnr
 	$(VIVADO_BIN) -mode batch -source $(HARD_PROGRAM_TCL) -tclargs $(ROOT) | tee $(HARD_BUILD_DIR)/program.log
-
-program: $(HARD_BUILD_DIR)/top.bit
 
 clean:
 	-rm -f $(ROOT)/vivado*
 	-rm -f $(ROOT)/*webtalk*
+	-rm -f $(ROOT)/tight_setup_hold_pins.txt
 	-rm -rf $(ROOT)/.hbs
 	-rm -rf $(ROOT)/.Xil
 	-rm -rf $(ROOT)/.vscode
@@ -58,4 +57,4 @@ clean:
 	-rm -rf $(HARD_SIM_BUILD)/*
 	-find $(HARD_SRC_DIR)/ip/*/* ! \( -name "*.xci" -o -name "*.prj" \) -exec rm -rf "{}" \;
 
-.PHONY: sbt sim syn pnr clean
+.PHONY: program clean

@@ -25,16 +25,46 @@ class UARTInterface extends Bundle {
 
 class UARTDriver(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module {
     val io = IO(new Bundle {
+        val uart_clock = Input(Clock())
+        val uart_reset = Input(Reset())
         val uart = new UARTInterface()
     })
 
     val rx = Module(new UARTReceiver(CLOCK_FREQUENCY = CLOCK_FREQUENCY, BAUD_RATE = BAUD_RATE))
     val tx = Module(new UARTTransmitter(CLOCK_FREQUENCY = CLOCK_FREQUENCY, BAUD_RATE = BAUD_RATE))
 
-    rx.io.rx.serial := RegNext(io.uart.rx.serial)
-    io.uart.rx.data <> rx.io.rx.data
-    io.uart.tx.serial := RegNext(tx.io.tx.serial)
-    tx.io.tx.data <> io.uart.tx.data
+    val rx_fifo = Module(new AXIStreamAsyncFIFO(DATA_WIDTH = 8,
+                                                KEEP_EN = false,
+                                                LAST_EN = false,
+                                                ID_WIDTH = 0,
+                                                DEST_WIDTH = 0,
+                                                USER_WIDTH = 0))
+    val tx_fifo = Module(new AXIStreamAsyncFIFO(DATA_WIDTH = 8,
+                                                KEEP_EN = false,
+                                                LAST_EN = false,
+                                                ID_WIDTH = 0,
+                                                DEST_WIDTH = 0,
+                                                USER_WIDTH = 0))                                       
+
+    rx.clock := io.uart_clock
+    tx.clock := io.uart_clock
+    rx_fifo.io.enq_clock := io.uart_clock
+    rx_fifo.io.deq_clock := clock
+    rx_fifo.io.enq_reset := io.uart_reset
+    rx_fifo.io.deq_reset := reset
+    tx_fifo.io.enq_clock := clock
+    tx_fifo.io.deq_clock := io.uart_clock
+    tx_fifo.io.enq_reset := reset
+    tx_fifo.io.deq_reset := io.uart_reset
+
+    withClock(io.uart_clock) {
+        rx.io.rx.serial := RegNext(RegNext(io.uart.rx.serial))
+        io.uart.tx.serial := RegNext(RegNext(tx.io.tx.serial))
+    }
+    io.uart.rx.data <> rx_fifo.io.deq
+    rx_fifo.io.enq <> rx.io.rx.data
+    tx_fifo.io.enq <> io.uart.tx.data
+    tx.io.tx.data <> tx_fifo.io.deq
 }
 
 class UARTReceiver(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module {

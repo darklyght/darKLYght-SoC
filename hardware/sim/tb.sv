@@ -1,5 +1,6 @@
 module tb (
     input i_clock,
+    input i_uart_clock,
     input i_reset
 );
 
@@ -14,6 +15,8 @@ module tb (
     uart_txr uart_txr (
         .i_clock(i_clock),
         .i_reset(i_reset),
+        .i_uart_clock(i_uart_clock),
+        .i_uart_reset(i_reset),
         .i_uart_rx(uart_txr_i_uart_rx),
         .o_uart_tx(uart_txr_o_uart_tx)
     );
@@ -24,6 +27,7 @@ module tb (
     top top (
         .clock(i_clock),
         .reset(i_reset),
+        .io_uart_clock(i_uart_clock),
         .io_uart_rx(io_uart_rx),
         .io_uart_tx(io_uart_tx)
     );

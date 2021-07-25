@@ -26,3 +26,15 @@ class AXIStream(val DATA_WIDTH: Int = 8,
         val tuser = UInt(USER_WIDTH.W)
     }
 }
+
+class AXIStreamAsyncFIFO(val DATA_WIDTH: Int = 8,
+                         val KEEP_EN: Boolean = true,
+                         val LAST_EN: Boolean = true,
+                         val ID_WIDTH: Int = 8,
+                         val DEST_WIDTH: Int = 8,
+                         val USER_WIDTH: Int = 8) extends AsyncFIFO[AXIStream](256, new AXIStream(DATA_WIDTH = DATA_WIDTH,
+                                                                                                  KEEP_EN = KEEP_EN,
+                                                                                                  LAST_EN = LAST_EN,
+                                                                                                  ID_WIDTH = ID_WIDTH,
+                                                                                                  DEST_WIDTH = DEST_WIDTH,
+                                                                                                  USER_WIDTH = USER_WIDTH))
