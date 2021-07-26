@@ -26,7 +26,6 @@ class UARTInterface extends Bundle {
 class UARTDriver(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module {
     val io = IO(new Bundle {
         val uart_clock = Input(Clock())
-        val uart_reset = Input(Reset())
         val uart = new UARTInterface()
     })
 
@@ -50,12 +49,10 @@ class UARTDriver(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module {
     tx.clock := io.uart_clock
     rx_fifo.io.enq_clock := io.uart_clock
     rx_fifo.io.deq_clock := clock
-    rx_fifo.io.enq_reset := io.uart_reset
-    rx_fifo.io.deq_reset := reset
     tx_fifo.io.enq_clock := clock
     tx_fifo.io.deq_clock := io.uart_clock
-    tx_fifo.io.enq_reset := reset
-    tx_fifo.io.deq_reset := io.uart_reset
+    rx_fifo.io.del := false.B
+    tx_fifo.io.del := false.B
 
     withClock(io.uart_clock) {
         rx.io.rx.serial := RegNext(RegNext(io.uart.rx.serial))

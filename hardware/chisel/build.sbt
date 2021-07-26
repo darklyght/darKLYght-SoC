@@ -26,7 +26,7 @@ def javacOptionsVersion(scalaVersion: String): Seq[String] = {
 
 name := "chisel-module-template"
 
-version := "3.4.3"
+version := "3.4.0"
 
 scalaVersion := "2.12.10"
 
@@ -38,13 +38,13 @@ resolvers ++= Seq(
 )
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
-addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % "3.4.0" cross CrossVersion.full)
+addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % "3.4.3" cross CrossVersion.full)
 
 // Provide a managed dependency on X if -DXVersion="" is supplied on the command line.
 val defaultVersions = Seq(
   "chisel3" -> "3.4.3",
   "chisel-iotesters" -> "1.4.1+",
-  "chiseltest"  -> "0.3.3+"
+  "chiseltest"  -> "0.2.1+"
   )
 
 libraryDependencies ++= defaultVersions.map { case (dep, ver) =>

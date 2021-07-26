@@ -10,15 +10,12 @@ class top(val CLOCK_FREQUENCY: Int, val UART_CLOCK_FREQUENCY: Int) extends Modul
     })
 
     val reset_sync = Module(new SyncDebouncer[Reset](CLOCK_FREQUENCY = CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, Reset()))
-    val uart_reset_sync = Module(new SyncDebouncer[Reset](CLOCK_FREQUENCY = UART_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, Reset()))
     reset_sync.io.input := false.B
-    uart_reset_sync.io.input := false.B
 
     val uart = Module(new UARTDriver(CLOCK_FREQUENCY = UART_CLOCK_FREQUENCY, BAUD_RATE = 115200))
     uart.clock := clock
     uart.reset := reset_sync.io.output
     uart.io.uart_clock := io.uart_clock
-    uart.io.uart_reset := uart_reset_sync.io.output
 
     uart.io.uart.rx.serial <> io.uart.rx
     io.uart.tx <> uart.io.uart.tx.serial

@@ -3,7 +3,6 @@ module uart_txr #(
 ) (
     input i_clock,
     input i_uart_clock,
-    input i_uart_reset,
     input i_reset,
     input i_uart_rx,
     output o_uart_tx
@@ -27,15 +26,6 @@ module uart_txr #(
         port = uart_create(NAME);
     end
 
-    wire uart_i_uart_reset; 
-
-    SyncDebouncer debounce (
-        .clock(i_clock),
-        .reset(1'b0),
-        .io_input(i_reset),
-        .io_output(uart_i_uart_reset)
-    );
-
     wire uart_i_rx;
     wire [7:0] uart_o_rx_data;
     wire uart_i_rx_data_ready;
@@ -49,7 +39,6 @@ module uart_txr #(
         .clock(i_clock),
         .reset(i_reset),
         .io_uart_clock(i_uart_clock),
-        .io_uart_reset(uart_i_uart_reset),
         .io_uart_rx_serial(uart_i_rx),
         .io_uart_rx_data_ready(uart_i_rx_data_ready),
         .io_uart_rx_data_valid(uart_o_rx_data_valid),

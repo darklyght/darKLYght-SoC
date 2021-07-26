@@ -16,7 +16,6 @@ module tb (
         .i_clock(i_clock),
         .i_reset(i_reset),
         .i_uart_clock(i_uart_clock),
-        .i_uart_reset(i_reset),
         .i_uart_rx(uart_txr_i_uart_rx),
         .o_uart_tx(uart_txr_o_uart_tx)
     );
