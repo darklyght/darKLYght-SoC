@@ -115,7 +115,7 @@ class AsyncFIFO[T <: Data](val DEPTH: Int,
             when (wr_ptr_update_valid && wr_ptr_update === wr_ptr_update_ack_sync(0)) {
                 wr_ptr_update_valid := false.B
                 wr_ptr_sync_gray_reg := wr_ptr_gray_reg
-                wr_ptr_update := ~wr_ptr_update_ack_sync(0)
+                wr_ptr_update_reg := ~wr_ptr_update_ack_sync(0)
             }
         }
 
@@ -134,8 +134,8 @@ class AsyncFIFO[T <: Data](val DEPTH: Int,
                     }
                 } .otherwise {
                     mem(wr_ptr_cur(SIZE - 1, 0)) := io.enq.bits
-                    wr_ptr := wr_ptr_cur + 1.U
-                    wr_ptr_gray_reg := (wr_ptr_cur + 1.U) ^ ((wr_ptr_cur + 1.U) >> 1)
+                    wr_ptr_cur := wr_ptr_cur + 1.U
+                    wr_ptr_cur_gray_reg := (wr_ptr_cur + 1.U) ^ ((wr_ptr_cur + 1.U) >> 1)
                     when (io.del) {
                         wr_ptr := wr_ptr_cur + 1.U
                         wr_ptr_gray_reg := (wr_ptr_cur + 1.U) ^ ((wr_ptr_cur + 1.U) >> 1)

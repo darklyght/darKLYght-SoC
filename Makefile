@@ -21,7 +21,7 @@ SBT_BIN = $(shell which sbt)
 VERILATOR_BIN = $(shell which verilator)
 VIVADO_BIN = $(shell which vivado)
 
-$(HARD_SRC_DIR)/hdl/top.v: $(HARD_SBT_LIST)
+$(HARD_SRC_DIR)/hdl/top.v: $(ROOT)/hardware/chisel/build.sbt $(HARD_SBT_LIST)
 	cd $(HARD_SBT_DIR) && $(SBT_BIN) 'runMain project.Instance -X mverilog --top-name top --target-dir $(HARD_SRC_DIR)/hdl'
 
 sbt: $(HARD_SRC_DIR)/hdl/top.v

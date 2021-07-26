@@ -51,8 +51,8 @@ class UARTDriver(val CLOCK_FREQUENCY: Int, val BAUD_RATE: Int) extends Module {
     rx_fifo.io.deq_clock := clock
     tx_fifo.io.enq_clock := clock
     tx_fifo.io.deq_clock := io.uart_clock
-    rx_fifo.io.del := false.B
-    tx_fifo.io.del := false.B
+    rx_fifo.io.del := true.B
+    tx_fifo.io.del := true.B
 
     withClock(io.uart_clock) {
         rx.io.rx.serial := RegNext(RegNext(io.uart.rx.serial))
