@@ -41,7 +41,7 @@ class AsyncFIFO[T <: Data](val DEPTH: Int,
         val deq = Decoupled(TYPE)
         val enq_clock = Input(Clock())
         val enq = Flipped(Decoupled(TYPE))
-        val del = Input(Bool())
+        val del = Input(Bool()) // Delimiter for frame mode
     })
     val SIZE = log2Ceil(DEPTH)
 
@@ -60,6 +60,8 @@ class AsyncFIFO[T <: Data](val DEPTH: Int,
     val rd_ptr_gray = Wire(UInt((SIZE + 1).W))
     val wr_ptr_update_sync = Wire(Bool())
 
+    // Reset synchronization
+
     withClockAndReset(io.enq_clock, reset) {
         val enq_rst_sync_reg = Seq.fill(3)(RegInit(true.B))
         enq_rst_sync_reg(2) := false.B
@@ -77,6 +79,8 @@ class AsyncFIFO[T <: Data](val DEPTH: Int,
         deq_rst_sync := deq_rst_sync_reg(0)
         deq_rst := deq_rst_sync_reg(2)
     }
+
+    // Write logic
     
     withClockAndReset(io.enq_clock, enq_rst_sync) {
         val wr_ptr = RegInit(0.U((SIZE + 1).W))
@@ -161,6 +165,8 @@ class AsyncFIFO[T <: Data](val DEPTH: Int,
             io.enq.ready := ~full && ~enq_rst_sync
         }
     }
+
+    // Read logic
 
     withClockAndReset(io.deq_clock, deq_rst_sync) {
         val rd_ptr_reg = RegInit(0.U((SIZE + 1).W))
