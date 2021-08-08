@@ -21,7 +21,7 @@ module ODDRWrapper #(
                     .DDR_CLK_EDGE(DDR_CLK_EDGE),
                     .INIT(INIT),
                     .SRTYPE(SRTYPE)
-                ) iddr (
+                ) oddr (
                     .C(C),
                     .CE(CE),
                     .R(R),
@@ -40,7 +40,7 @@ module ODDRWrapper #(
                     .DDR_CLK_EDGE(DDR_CLK_EDGE),
                     .INIT(INIT),
                     .SRTYPE(SRTYPE)
-                ) iddr (
+                ) oddr (
                     .C(C),
                     .CE(CE),
                     .R(R),
@@ -69,8 +69,9 @@ module ODDRSIM #(
     output Q
 );
     reg q_reg = INIT;
-
+    /* verilator lint_off WIDTH */
     if (DDR_CLK_EDGE == "OPPOSITE_EDGE") begin
+    /* verilator lint_on WIDTH */
         if (SRTYPE == "ASYNC") begin
             always @(posedge C or negedge C or posedge R or posedge S) begin
                 if (R || S) begin

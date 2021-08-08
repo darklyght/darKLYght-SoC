@@ -26,8 +26,8 @@ $(HARD_SRC_DIR)/hdl/top.v: $(ROOT)/hardware/chisel/build.sbt $(HARD_SBT_LIST)
 
 sbt: $(HARD_SRC_DIR)/hdl/top.v
 
-sim: $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(HARD_SIM_CLIST)
-	$(VERILATOR_BIN) -LDFLAGS "-lutil" -CFLAGS "-I${HARD_SIM_DIR}/include" --cc --trace-fst $(HARD_SRC_LIST) $(HARD_SIM_LIST) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include --top-module tb --exe $(HARD_SIM_CLIST) --build
+sim: $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(HARD_SIM_CLIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v)
+	$(VERILATOR_BIN) -LDFLAGS "-lutil" -CFLAGS "-I${HARD_SIM_DIR}/include" --cc --trace-fst $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include +define+SIMULATION --top-module tb --exe $(HARD_SIM_CLIST) --build
 	cd $(HARD_SIM_DIR)/build/ && ./Vtb
 
 $(HARD_BUILD_DIR)/post_synth.dcp: $(HARD_SRC_DIR)/syn.v $(HARD_SRC_LIST) $(HARD_SYN_CON) $(HARD_SYN_TCL)
@@ -44,6 +44,8 @@ program: pnr
 	$(VIVADO_BIN) -mode batch -source $(HARD_PROGRAM_TCL) -tclargs $(ROOT) | tee $(HARD_BUILD_DIR)/program.log
 
 clean:
+	-rm -f $(ROOT)/*.out
+	-rm -f $(ROOT)/*.vcd
 	-rm -f $(ROOT)/vivado*
 	-rm -f $(ROOT)/*webtalk*
 	-rm -f $(ROOT)/tight_setup_hold_pins.txt

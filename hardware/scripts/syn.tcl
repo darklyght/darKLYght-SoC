@@ -5,7 +5,7 @@ file mkdir $output_dir
 
 read_verilog [ glob $hardware_root/src/syn.v ]
 read_verilog [ glob $hardware_root/src/hdl/*.v ]
-#read_verilog [ glob $hardware_root/src/blackboxes/*.v ]
+read_verilog [ glob $hardware_root/src/blackboxes/*.v ]
 read_xdc [ glob $hardware_root/src/constraints/*.xdc ]
 
 set_property part xc7a200tsbg484-1 [ current_project ]
