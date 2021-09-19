@@ -12,21 +12,26 @@ module udp_txr (
 );
 
     import "DPI-C" function
-        chandle udp_create(input int port_number);
+        chandle eth_create();
         
     import "DPI-C" function
-        int udp_tx_valid(input chandle port);
+        void udp_create(input chandle eth, int port_number);
+
+    import "DPI-C" function
+        int eth_tx_valid(input chandle eth);
         
     import "DPI-C" function
-        byte udp_tx_data(input chandle port);
+        byte eth_tx_data(input chandle eth);
         
     import "DPI-C" function
-        void udp_rx(input chandle port, byte data, int last);
+        void eth_rx(input chandle eth, byte data, int last);
     
-    chandle port;
+    chandle eth;
 
     initial begin
-        port = udp_create(8000);
+        eth = eth_create();
+        udp_create(eth, 8000);
+        udp_create(eth, 8001);
     end
 
     wire udp_i_rx_ready;
@@ -74,10 +79,10 @@ module udp_txr (
             udp_i_tx_data <= 8'b0;
             udp_i_tx_last <= 1'b0;
         end else begin
-            if (udp_o_tx_ready) udp_i_tx_valid <= udp_tx_valid(port) > 32'b0;
-            if (udp_o_tx_ready) udp_i_tx_last <= udp_tx_valid(port) == 32'b1;
-            if (udp_o_tx_ready) udp_i_tx_data <= udp_tx_data(port);
-            if (udp_o_rx_valid) udp_rx(port, udp_o_rx_data, int'(udp_o_rx_last));
+            if (udp_o_tx_ready) udp_i_tx_valid <= eth_tx_valid(eth) > 32'b0;
+            if (udp_o_tx_ready) udp_i_tx_last <= eth_tx_valid(eth) == 32'b1;
+            if (udp_o_tx_ready) udp_i_tx_data <= eth_tx_data(eth);
+            if (udp_o_rx_valid) eth_rx(eth, udp_o_rx_data, int'(udp_o_rx_last));
         end
     end
 

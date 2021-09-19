@@ -24,7 +24,7 @@ void* uart_create(const char* name) {
     int val = ttyname_r(port->slave, port->name, 64);
     (void) val;
     
-    printf("%s\n", port->name);
+    printf("UART at Device: %s is ready.\n", port->name);
     
     fcntl(port->master, F_SETFL, fcntl(port->master, F_GETFL, 0) | O_NONBLOCK);
 
