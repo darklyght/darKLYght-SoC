@@ -124,7 +124,7 @@ class IPFrameTx extends Module {
     io.status.busy := busy
     io.status.error_incomplete_payload := error_incomplete_payload
 
-    header_fifo.io.deq.ready := state === State.sHeader && frame_pointer === 19.U && io.ethernet_header.ready
+    header_fifo.io.deq.ready := (state === State.sHeader && frame_pointer === 19.U) || io.ethernet_header.ready
     input_fifo.io.deq.ready := (state === State.sPayload && io.ethernet_output.ready) || state === State.sEnd
 
     io.ethernet_header.bits <> header_fifo.io.deq.bits.ethernet
