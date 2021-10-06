@@ -249,7 +249,7 @@ class EthernetFrameRx extends Module {
     }
     val state = RegInit(State.sIdle)
 
-    io.input.ready := header_fifo.io.enq.ready && output_fifo.io.enq.ready
+    io.input.ready := state === State.sIdle || (state === State.sHeader && header_fifo.io.enq.ready) || (state === State.sPayload && output_fifo.io.enq.ready)
     io.header.bits := header_fifo.io.deq.bits
     io.header.valid := header_fifo.io.deq.valid
     io.output <> output_fifo.io.deq
@@ -276,9 +276,6 @@ class EthernetFrameRx extends Module {
         is (State.sHeader) {
             when (io.input.fire()) {
                 frame_pointer := frame_pointer + 1.U
-                when (io.input.bits.tlast.get) {
-                    io.status.error_incomplete_packet.get := true.B
-                }
                 when (io.input.bits.tlast.get) {
                     state := State.sIdle
                     error_incomplete_packet := true.B
