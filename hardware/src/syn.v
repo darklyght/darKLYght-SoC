@@ -57,8 +57,7 @@ module syn (
     );
 
     wire uart_clock_int;
-    wire uart_clock_fbin;
-    wire uart_clock_fbout;
+    wire uart_clock_fb;
     wire uart_clock_locked;
     wire uart_clock;
 
@@ -74,20 +73,15 @@ module syn (
         .CLKOUT0_PHASE(0.000),
         .CLKOUT0_DUTY_CYCLE(0.500)
     ) uart_clock_mmcm (
-        .CLKFBOUT(uart_clock_fbout),
+        .CLKFBOUT(uart_clock_fb),
         .CLKFBOUTB(),
         .CLKOUT0(uart_clock_int),
         .CLKOUT0B(),
-        .CLKFBIN(uart_clock_fbin),
+        .CLKFBIN(uart_clock_fb),
         .CLKIN1(i_clock),
         .LOCKED(uart_clock_locked),
         .PWRDWN(1'b0),
         .RST(reset)
-    );
-
-    BUFG uart_clock_fb_bufg (
-        .I(uart_clock_fbout),
-        .O(uart_clock_fbin)
     );
 
     BUFG uart_clock_bufg (
@@ -98,8 +92,7 @@ module syn (
     wire ethernet_clock_int;
     wire ethernet_clock90_int;
     wire ethernet_200clock_int;
-    wire ethernet_clock_fbin;
-    wire ethernet_clock_fbout;
+    wire ethernet_clock_fb;
     wire ethernet_clock_locked;
     wire ethernet_clock;
     wire ethernet_clock90;
@@ -121,9 +114,10 @@ module syn (
         .CLKOUT1_DUTY_CYCLE(0.500),
         .CLKOUT2_DIVIDE(5),
         .CLKOUT2_PHASE(0.000),
-        .CLKOUT2_DUTY_CYCLE(0.500)
+        .CLKOUT2_DUTY_CYCLE(0.500),
+        .REF_JITTER1(0.010)
     ) ethernet_clock_mmcm (
-        .CLKFBOUT(ethernet_clock_fbout),
+        .CLKFBOUT(ethernet_clock_fb),
         .CLKFBOUTB(),
         .CLKOUT0(ethernet_clock_int),
         .CLKOUT0B(),
@@ -131,16 +125,11 @@ module syn (
         .CLKOUT1B(),
         .CLKOUT2(ethernet_200clock_int),
         .CLKOUT2B(),
-        .CLKFBIN(ethernet_clock_fbin),
+        .CLKFBIN(ethernet_clock_fb),
         .CLKIN1(i_clock),
         .LOCKED(ethernet_clock_locked),
         .PWRDWN(1'b0),
         .RST(reset)
-    );
-
-    BUFG ethernet_clock_fb_bufg (
-        .I(ethernet_clock_fbout),
-        .O(ethernet_clock_fbin)
     );
 
     BUFG ethernet_clock_bufg (

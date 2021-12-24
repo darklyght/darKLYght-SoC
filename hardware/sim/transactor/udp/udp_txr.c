@@ -144,8 +144,8 @@ void eth_rx(void* eth, char data, int last) {
     ((eth_master_t*)eth)->rx_pointer += 1;
     if (last) {
         ((eth_master_t*)eth)->rx_buffer[((eth_master_t*)eth)->rx_pointer] = '\0';
-        if (strcmp(get_destination_ip(((eth_master_t*)eth)->rx_buffer), IP_ADDRESS) == 0) { // TODO: To update to source IP once UDP loopback is done
-            int port = get_destination_port(((eth_master_t*)eth)->rx_buffer); // TODO: To update to source port once UDP loopback is done
+        if (strcmp(get_source_ip(((eth_master_t*)eth)->rx_buffer), IP_ADDRESS) == 0) {
+            int port = get_source_port(((eth_master_t*)eth)->rx_buffer);
             char* data = get_data(((eth_master_t*)eth)->rx_buffer);
             int port_index = -1;
             process_packet(((eth_master_t*)eth)->rx_buffer, ((eth_master_t*)eth)->rx_pointer);

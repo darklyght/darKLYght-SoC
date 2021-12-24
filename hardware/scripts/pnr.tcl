@@ -17,3 +17,4 @@ report_power -file $output_dir/post_route_power.rpt
 report_drc -file $output_dir/post_imp_drc.rpt
 
 write_bitstream -force $output_dir/top.bit
+write_debug_probes -force $output_dir/top.ltx

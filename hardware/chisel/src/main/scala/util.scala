@@ -3,10 +3,10 @@ package project
 import chisel3._
 import chisel3.util._
 
-class SyncDebouncer[T <: Data](val CLOCK_FREQUENCY: Int, val SAMPLE_FREQUENCY: Int, val TYPE: T) extends Module {
+class SyncDebouncer(val CLOCK_FREQUENCY: Int, val SAMPLE_FREQUENCY: Int, val WIDTH: Int) extends Module {
     val io = IO(new Bundle {
-        val input = Input(TYPE)
-        val output = Output(TYPE)
+        val input = Input(UInt(WIDTH.W))
+        val output = Output(UInt(WIDTH.W))
     })
     
     // Synchronizer
@@ -17,7 +17,7 @@ class SyncDebouncer[T <: Data](val CLOCK_FREQUENCY: Int, val SAMPLE_FREQUENCY: I
     
     val FAC = CLOCK_FREQUENCY / SAMPLE_FREQUENCY
     
-    val input_db = Reg(TYPE)
+    val input_db = Reg(UInt(WIDTH.W))
     val count = RegInit(0.U(log2Ceil(FAC).W))
     val tick = count === (FAC - 1).U
         
@@ -28,7 +28,64 @@ class SyncDebouncer[T <: Data](val CLOCK_FREQUENCY: Int, val SAMPLE_FREQUENCY: I
         input_db := input_sync
     }
 
-    io.output := input_db
+    io.output := input_db | input_sync
+}
+
+class Arbiter(val N_INPUTS: Int,
+              val ROUND_ROBIN: Boolean,
+              val BLOCKING: Boolean,
+              val RELEASE: Boolean) extends Module {
+    val io = IO(new Bundle {
+        val request = Input(Vec(N_INPUTS, Bool()))
+        val acknowledge = Input(Vec(N_INPUTS, Bool()))
+        val chosen = Output(UInt(log2Ceil(N_INPUTS + 1).W))
+        val chosen_oh = Output(UInt(N_INPUTS.W))
+    })
+
+    val chosen_oh = RegInit(1.U(N_INPUTS.W))
+    val chosen = RegInit(0.U(log2Ceil(N_INPUTS + 1).W))
+    val mask = RegInit(-1.S(N_INPUTS.W))
+    val locked = RegInit(false.B)
+
+    io.chosen := chosen
+    io.chosen_oh := chosen_oh
+
+    if (BLOCKING && !RELEASE) {
+        when (~((io.request.asUInt & chosen_oh.asUInt).orR)) {
+            if (ROUND_ROBIN) {
+                chosen := PriorityEncoder(io.request.asUInt & mask.asUInt)
+                chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
+                mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0)
+            } else {
+                chosen := PriorityEncoder(io.request.asUInt)
+                chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
+            }
+        }
+    } else if (BLOCKING && RELEASE) {
+        when (io.request.asUInt.orR && (~((~io.acknowledge.asUInt & chosen_oh.asUInt).orR) || ~locked)) {
+            if (ROUND_ROBIN) {
+                chosen := PriorityEncoder(io.request.asUInt & mask.asUInt)
+                chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
+                mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0)
+                locked := true.B
+            } else {
+                chosen := PriorityEncoder(io.request.asUInt)
+                chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
+                locked := true.B
+            }
+        } .elsewhen (~((~io.acknowledge.asUInt & chosen_oh.asUInt).orR)) {
+            locked := false.B
+        }
+    } else {
+        if (ROUND_ROBIN) {
+            chosen := PriorityEncoder(io.request.asUInt & mask.asUInt)
+            chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
+            mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0)
+        } else {
+            chosen := PriorityEncoder(io.request.asUInt)
+            chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
+        }
+    }
 }
 
 class FIFOStatus extends Bundle {

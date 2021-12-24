@@ -6,8 +6,12 @@
 ## Clock Signal
 set_property -dict { PACKAGE_PIN R4    IOSTANDARD LVCMOS33 } [get_ports { i_clock }]; #IO_L13P_T2_MRCC_34 Sch=sysclk
 create_clock -add -name i_clock -period 10.00 -waveform {0 5} [get_ports i_clock]
+create_clock -period 8.000 -name i_ethernet_rx_clock [get_ports i_ethernet_rx_clock]
 set_clock_groups -asynchronous -group [get_clocks top_clock_int]
 set_clock_groups -asynchronous -group [get_clocks uart_clock_int]
+# tx_clock_1_reg and tx_clock_2_reg only change at most once every 2 ethernet_clock cycles
+set_max_delay -from [get_cells top/network/ethernet_phy/phy/tx_clock_1_reg] -to [get_cells top/network/ethernet_phy/phy/oddr_clock/genblk1[0].oddr] 10
+set_max_delay -from [get_cells top/network/ethernet_phy/phy/tx_clock_2_reg] -to [get_cells top/network/ethernet_phy/phy/oddr_clock/genblk1[0].oddr] 10
 
 ## FMC Transceiver clocks (Must be set to value provided by Mezzanine card, currently set to 156.25 MHz)
 ## Note: This clock is attached to a MGTREFCLK pin

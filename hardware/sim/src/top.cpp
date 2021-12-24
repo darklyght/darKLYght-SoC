@@ -29,7 +29,7 @@ int main(int argc, char** argv, char** env) {
     // Tick the clock until we are done
     while(!contextp->gotFinish()) {
         contextp->timeInc(clocks.next_edge());
-        if (contextp->time() >= 1000000000) {
+        if (contextp->time() >= 100000) {
             tb->i_reset = 0;
         }
         tb->i_clock = top_clock->get_state();

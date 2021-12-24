@@ -68,11 +68,12 @@ module ODDRSIM #(
     input D2,
     output Q
 );
-    reg q_reg = INIT;
+    // reg q_reg = INIT;
     /* verilator lint_off WIDTH */
     if (DDR_CLK_EDGE == "OPPOSITE_EDGE") begin
     /* verilator lint_on WIDTH */
         if (SRTYPE == "ASYNC") begin
+            reg q_reg = INIT;
             always @(posedge C or negedge C or posedge R or posedge S) begin
                 if (R || S) begin
                     q_reg <= INIT;
@@ -85,7 +86,9 @@ module ODDRSIM #(
                     
                 end
             end
+            assign Q = q_reg;
         end else if (SRTYPE == "SYNC") begin
+            reg q_reg = INIT;
             always @(posedge C or negedge C) begin
                 if (R || S) begin
                     q_reg <= INIT;
@@ -97,10 +100,12 @@ module ODDRSIM #(
                     end
                 end
             end
+            assign Q = q_reg;
         end
     end else if (DDR_CLK_EDGE == "SAME_EDGE") begin
-        reg d_reg_2 = INIT;
         if (SRTYPE == "ASYNC") begin
+            reg d_reg_2 = INIT;
+            reg q_reg = INIT;
             always @(posedge C or negedge C or posedge R or posedge S) begin
                 if (R || S) begin
                     q_reg <= INIT;
@@ -114,7 +119,10 @@ module ODDRSIM #(
                     end
                 end
             end
+            assign Q = q_reg;
         end else if (SRTYPE == "SYNC") begin
+            reg d_reg_2 = INIT;
+            reg q_reg = INIT;
             always @(posedge C or negedge C) begin
                 if (R || S) begin
                     q_reg <= INIT;
@@ -128,10 +136,9 @@ module ODDRSIM #(
                     end
                 end
             end
+            assign Q = q_reg;
         end
     end
-
-    assign Q = q_reg;
 
 endmodule
 

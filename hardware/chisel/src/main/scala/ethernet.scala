@@ -56,6 +56,49 @@ class EthernetFrameStatus(val DIRECTION: String) extends Bundle {
     val error_incomplete_packet = if (DIRECTION == "RECEIVE") Some(Output(Bool())) else None
 }
 
+class EthernetFrameMux(val N_INPUTS: Int) extends Module {
+    val io = IO(new Bundle {
+        val input_headers = Flipped(Vec(N_INPUTS, Decoupled(new EthernetFrameHeader())))
+        val inputs = Flipped(Vec(N_INPUTS, Decoupled(new AXIStream(DATA_WIDTH = 8,
+                                                                   KEEP_EN = false,
+                                                                   LAST_EN = true,
+                                                                   ID_WIDTH = 0,
+                                                                   DEST_WIDTH = 0,
+                                                                   USER_WIDTH = 1))))
+        val output_header = Decoupled(new EthernetFrameHeader())
+        val output = Decoupled(new AXIStream(DATA_WIDTH = 8,
+                                             KEEP_EN = false,
+                                             LAST_EN = true,
+                                             ID_WIDTH = 0,
+                                             DEST_WIDTH = 0,
+                                             USER_WIDTH = 1))
+    })
+
+    val arbiter = Module(new Arbiter(N_INPUTS = N_INPUTS,
+                                     ROUND_ROBIN = false,
+                                     BLOCKING = true,
+                                     RELEASE = true))
+    // val output_fifo = Module(new Queue(new AXIStream(DATA_WIDTH = 8,
+    //                                                  KEEP_EN = false,
+    //                                                  LAST_EN = true,
+    //                                                  ID_WIDTH = 0,
+    //                                                  DEST_WIDTH = 0,
+    //                                                  USER_WIDTH = 1), 8))
+
+    for (i <- 0 until N_INPUTS) {
+        arbiter.io.request(i) := io.input_headers(i).valid
+        arbiter.io.acknowledge(i) := io.inputs(i).bits.tlast.get
+        io.input_headers(i).ready := arbiter.io.chosen_oh(i) & io.output_header.ready
+        io.inputs(i).ready := arbiter.io.chosen_oh(i) & io.output.ready
+    }
+
+    io.output_header.valid := io.input_headers(arbiter.io.chosen).valid
+    io.output_header.bits := io.input_headers(arbiter.io.chosen).bits
+
+    io.output.valid := io.inputs(arbiter.io.chosen).valid
+    io.output.bits := io.inputs(arbiter.io.chosen).bits
+}
+
 class EthernetFrame extends Module {
     val io = IO(new Bundle {
         val tx_header = Flipped(Decoupled(new EthernetFrameHeader()))
@@ -118,13 +161,13 @@ class EthernetFrameTx extends Module {
                                              DEST_WIDTH = 0,
                                              USER_WIDTH = 1))
     })
-    val header_fifo = Module(new Queue(new EthernetFrameHeader(), 1))
+    val header = Reg(new EthernetFrameHeader())
     val input_fifo = Module(new Queue(new AXIStream(DATA_WIDTH = 8,
-                                                     KEEP_EN = false,
-                                                     LAST_EN = true,
-                                                     ID_WIDTH = 0,
-                                                     DEST_WIDTH = 0,
-                                                     USER_WIDTH = 1), 4096))
+                                                    KEEP_EN = false,
+                                                    LAST_EN = true,
+                                                    ID_WIDTH = 0,
+                                                    DEST_WIDTH = 0,
+                                                    USER_WIDTH = 1), 16))
     val frame_pointer = RegInit(0.U(4.W))
     val busy = RegInit(false.B)
 
@@ -133,42 +176,45 @@ class EthernetFrameTx extends Module {
     }
     val state = RegInit(State.sIdle)
 
-    io.header <> header_fifo.io.enq
+    io.header.ready := state === State.sIdle
     io.input <> input_fifo.io.enq
     io.status.busy := busy
 
-    header_fifo.io.deq.ready := state === State.sHeader && frame_pointer === 13.U
     input_fifo.io.deq.ready := state === State.sPayload && io.output.ready
+
+    when (io.header.fire()) {
+        header := io.header.bits
+    }
 
     when (state === State.sHeader) {
         when (frame_pointer === 0.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.dst_mac(47, 40)
+            io.output.bits.tdata := header.dst_mac(47, 40)
         } .elsewhen (frame_pointer === 1.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.dst_mac(39, 32)
+            io.output.bits.tdata := header.dst_mac(39, 32)
         } .elsewhen (frame_pointer === 2.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.dst_mac(31, 24)
+            io.output.bits.tdata := header.dst_mac(31, 24)
         } .elsewhen (frame_pointer === 3.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.dst_mac(23, 16)
+            io.output.bits.tdata := header.dst_mac(23, 16)
         } .elsewhen (frame_pointer === 4.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.dst_mac(15, 8)
+            io.output.bits.tdata := header.dst_mac(15, 8)
         } .elsewhen (frame_pointer === 5.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.dst_mac(7, 0)
+            io.output.bits.tdata := header.dst_mac(7, 0)
         } .elsewhen (frame_pointer === 6.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.src_mac(47, 40)
+            io.output.bits.tdata := header.src_mac(47, 40)
         } .elsewhen (frame_pointer === 7.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.src_mac(39, 32)
+            io.output.bits.tdata := header.src_mac(39, 32)
         } .elsewhen (frame_pointer === 8.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.src_mac(31, 24)
+            io.output.bits.tdata := header.src_mac(31, 24)
         } .elsewhen (frame_pointer === 9.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.src_mac(23, 16)
+            io.output.bits.tdata := header.src_mac(23, 16)
         } .elsewhen (frame_pointer === 10.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.src_mac(15, 8)
+            io.output.bits.tdata := header.src_mac(15, 8)
         } .elsewhen (frame_pointer === 11.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.src_mac(7, 0)
+            io.output.bits.tdata := header.src_mac(7, 0)
         } .elsewhen (frame_pointer === 12.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.ethernet_type(15, 8)
+            io.output.bits.tdata := header.ethernet_type(15, 8)
         } .elsewhen (frame_pointer === 13.U) {
-            io.output.bits.tdata := header_fifo.io.deq.bits.ethernet_type(7, 0)
+            io.output.bits.tdata := header.ethernet_type(7, 0)
         } .otherwise {
             io.output.bits.tdata := 0.U
         }
@@ -189,7 +235,7 @@ class EthernetFrameTx extends Module {
 
     switch (state) {
         is (State.sIdle) {
-            when (header_fifo.io.deq.valid && input_fifo.io.deq.valid) {
+            when (io.header.fire()) {
                 state := State.sHeader
                 frame_pointer := 0.U
                 busy := true.B
@@ -231,13 +277,12 @@ class EthernetFrameRx extends Module {
                                              USER_WIDTH = 1))
         val status = new EthernetFrameStatus(DIRECTION = "RECEIVE")
     })
-    val header_fifo = Module(new Queue(new EthernetFrameHeader(), 1))
     val output_fifo = Module(new Queue(new AXIStream(DATA_WIDTH = 8,
                                                      KEEP_EN = false,
                                                      LAST_EN = true,
                                                      ID_WIDTH = 0,
                                                      DEST_WIDTH = 0,
-                                                     USER_WIDTH = 1), 4096))
+                                                     USER_WIDTH = 1), 16))
     val header = Reg(new EthernetFrameHeader())
     val header_valid = RegInit(false.B)
     val frame_pointer = RegInit(0.U(4.W))
@@ -249,19 +294,21 @@ class EthernetFrameRx extends Module {
     }
     val state = RegInit(State.sIdle)
 
-    io.input.ready := state === State.sIdle || (state === State.sHeader && header_fifo.io.enq.ready) || (state === State.sPayload && output_fifo.io.enq.ready)
-    io.header.bits := header_fifo.io.deq.bits
-    io.header.valid := header_fifo.io.deq.valid
+    io.input.ready := state === State.sIdle || (state === State.sHeader && ~header_valid) || (state === State.sPayload && output_fifo.io.enq.ready)
+    io.header.bits := header
+    io.header.valid := header_valid
     io.output <> output_fifo.io.deq
     io.status.busy := busy
     io.status.error_incomplete_packet.get := error_incomplete_packet
 
-    header_fifo.io.enq.bits := header
-    header_fifo.io.enq.valid := header_valid
-    header_fifo.io.deq.ready := io.input.bits.tlast.get || io.header.ready
-
     output_fifo.io.enq.bits := io.input.bits
     output_fifo.io.enq.valid := io.input.fire() && state === State.sPayload
+
+    when (io.header.fire()) {
+        header_valid := false.B
+    } .elsewhen (io.input.fire() && state === State.sHeader && frame_pointer === 13.U) {
+        header_valid := true.B
+    }
 
     switch (state) {
         is (State.sIdle) {
@@ -328,9 +375,6 @@ class EthernetFrameRx extends Module {
             }
         }
         is (State.sPayload) {
-            when (header_fifo.io.enq.fire()) {
-                header_valid := false.B
-            }
             when (io.input.bits.tlast.get) {
                 state := State.sIdle
                 busy := false.B
@@ -366,7 +410,7 @@ class EthernetPHY(val PADDING: Boolean, val MINIMUM_FRAME_LENGTH: Int) extends M
     })
     val phy = Module(new RGMIIPHY())
     val mac = Module(new GMIIMAC(PADDING = PADDING, MINIMUM_FRAME_LENGTH = MINIMUM_FRAME_LENGTH, USER_WIDTH = 8))
-    val rx_fifo = Module(new AsyncFIFO[AXIStream](DEPTH = 4096,
+    val rx_fifo = Module(new AsyncFIFO[AXIStream](DEPTH = 2048,
                                                   FRAME_FIFO = true,
                                                   DROP_WHEN_FULL = true,
                                                   DROP_BAD_FRAME = true,
@@ -377,7 +421,7 @@ class EthernetPHY(val PADDING: Boolean, val MINIMUM_FRAME_LENGTH: Int) extends M
                                                                 ID_WIDTH = 0,
                                                                 DEST_WIDTH = 0,
                                                                 USER_WIDTH = 1)))
-    val tx_fifo = Module(new AsyncFIFO[AXIStream](DEPTH = 4096,
+    val tx_fifo = Module(new AsyncFIFO[AXIStream](DEPTH = 2048,
                                                   FRAME_FIFO = true,
                                                   DROP_WHEN_FULL = false,
                                                   DROP_BAD_FRAME = true,
@@ -464,7 +508,28 @@ class EthernetPHY(val PADDING: Boolean, val MINIMUM_FRAME_LENGTH: Int) extends M
     mac.io.tx_mii_select := tx_mii_select
     mac.io.tx_ifg_delay := io.tx_ifg_delay
 
-    rx_fifo.reset := reset.asBool() || phy.io.mac.rx.reset.asBool()
+    // mac.io.rx_out <> io.rx
+    // mac.io.rx_mii_select := rx_mii_select
+    // mac.io.tx_in <> io.tx
+    // mac.io.tx_mii_select := tx_mii_select
+    // mac.io.tx_ifg_delay := io.tx_ifg_delay
+
+    val rx_reset = Wire(UInt(1.W))
+    val tx_reset = Wire(UInt(1.W))
+
+    withClockAndReset(phy.io.mac.rx.clock, reset.asAsyncReset) {
+        val rx_reset_reg = RegInit("hF".U(4.W))
+        rx_reset_reg := Cat(0.U(1.W), rx_reset_reg(3, 1))
+        rx_reset := rx_reset_reg(0)
+    }
+
+    withClockAndReset(phy.io.mac.tx.clock, reset.asAsyncReset) {
+        val tx_reset_reg = RegInit("hF".U(4.W))
+        tx_reset_reg := Cat(0.U(1.W), tx_reset_reg(3, 1))
+        tx_reset := tx_reset_reg(0)
+    }
+
+    rx_fifo.reset := reset.asBool() || rx_reset.asBool()
     rx_fifo.io.deq_clock := clock
     rx_fifo.io.deq <> io.rx
     rx_fifo.io.deq_status <> io.rx_fifo_status
@@ -472,7 +537,7 @@ class EthernetPHY(val PADDING: Boolean, val MINIMUM_FRAME_LENGTH: Int) extends M
     rx_fifo.io.del.get := mac.io.rx_out.bits.tlast.get
     rx_fifo.io.bad.get := mac.io.rx_out.bits.tuser.get(0)
 
-    tx_fifo.reset := reset.asBool() || phy.io.mac.tx.reset.asBool()
+    tx_fifo.reset := reset.asBool() || tx_reset.asBool()
     tx_fifo.io.deq_clock := phy.io.mac.tx.clock
     tx_fifo.io.enq_clock := clock
     tx_fifo.io.enq <> io.tx
@@ -504,7 +569,7 @@ class EthernetPHY(val PADDING: Boolean, val MINIMUM_FRAME_LENGTH: Int) extends M
     tx_mac_status(0) := tx_mac_status(1)
     io.tx_mac_status := (tx_mac_status(1).asTypeOf(UInt(2.W)) ^ tx_mac_status(0).asTypeOf(UInt(2.W))).asTypeOf(new GMIIStatus(DIRECTION = "TRANSMIT"))
 
-    io.speed := RegNext(RegNext(speed))
+    io.speed := speed
 }
 
 class RGMIIPHY extends Module {
@@ -548,11 +613,11 @@ class RGMIIPHY extends Module {
         count := count + 1.U
         tx_clock_rise := false.B
         tx_clock_fall := false.B
-        when (count === 24.U) {
+        when (count === 2.U) {
             tx_clock_1 := 1.U
             tx_clock_2 := 1.U
             tx_clock_rise := true.B
-        } .elsewhen (count >= 49.U) {
+        } .elsewhen (count >= 4.U) {
             tx_clock_1 := 0.U
             tx_clock_2 := 0.U
             tx_clock_fall := true.B
@@ -581,7 +646,7 @@ class RGMIIPHY extends Module {
         tx_data_2 := io.mac.tx.data(3, 0)
         tx_control_1 := Mux(tx_clock_2.asBool(), io.mac.tx.data_valid, io.mac.tx.data_valid ^ io.mac.tx.error)
         tx_control_2 := Mux(tx_clock_2.asBool(), io.mac.tx.data_valid, io.mac.tx.data_valid ^ io.mac.tx.error)
-      io.mac.tx.clock_en := tx_clock_fall  
+        io.mac.tx.clock_en := tx_clock_fall
     } .otherwise {
         tx_data_1 := io.mac.tx.data(3, 0)
         tx_data_2 := io.mac.tx.data(7, 4)
@@ -593,7 +658,7 @@ class RGMIIPHY extends Module {
     val oddr_clock = Module(new ODDRWrapper(DDR_CLK_EDGE = "SAME_EDGE", INIT = 0, SRTYPE = "ASYNC", WIDTH = 1))
     oddr_clock.io.C := io.clock_90
     oddr_clock.io.CE := true.B
-    oddr_clock.io.R := false.B
+    oddr_clock.io.R := io.mac.tx.reset.asUInt
     oddr_clock.io.S := false.B
     oddr_clock.io.D1 := tx_clock_1
     oddr_clock.io.D2 := tx_clock_2
@@ -602,7 +667,7 @@ class RGMIIPHY extends Module {
     val oddr_data = Module(new ODDRWrapper(DDR_CLK_EDGE = "SAME_EDGE", INIT = 0, SRTYPE = "ASYNC", WIDTH = 5))
     oddr_data.io.C := clock
     oddr_data.io.CE := true.B
-    oddr_data.io.R := false.B
+    oddr_data.io.R := io.mac.tx.reset.asUInt
     oddr_data.io.S := false.B
     oddr_data.io.D1 := Cat(io.mac.tx.data(3, 0), io.mac.tx.data_valid)
     oddr_data.io.D2 := Cat(io.mac.tx.data(7, 4), io.mac.tx.data_valid ^ io.mac.tx.error)
@@ -707,7 +772,7 @@ class GMIIRx(val USER_WIDTH: Int) extends Module {
                 gmii_rx_data(4) := Cat(io.gmii.data(3, 0), gmii_rx_data(4)(7, 4))
                 when (mii_locked) {
                     mii_locked := io.gmii.data_valid
-                } .elsewhen (io.gmii.data_valid && Cat(io.gmii.data(3, 0), gmii_rx_data(4)) === DELIMITER) {
+                } .elsewhen (io.gmii.data_valid && Cat(io.gmii.data(3, 0), gmii_rx_data(4)(7, 4)) === DELIMITER) {
                     mii_locked := true.B
                     mii_odd := true.B
                 }
