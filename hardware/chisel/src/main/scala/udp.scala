@@ -19,6 +19,43 @@ class UDPFrameStatus(val DIRECTION: String) extends Bundle {
     val error_invalid_checksum = if (DIRECTION == "RECEIVE") Some(Output(Bool())) else None
 }
 
+class UDPFrameMux(val N_INPUTS: Int) extends Module {
+    val io = IO(new Bundle {
+        val input_headers = Flipped(Vec(N_INPUTS, Decoupled(new UDPFrameHeader())))
+        val inputs = Flipped(Vec(N_INPUTS, Decoupled(new AXIStream(DATA_WIDTH = 8,
+                                                                   KEEP_EN = false,
+                                                                   LAST_EN = true,
+                                                                   ID_WIDTH = 0,
+                                                                   DEST_WIDTH = 0,
+                                                                   USER_WIDTH = 1))))
+        val output_header = Decoupled(new UDPFrameHeader())
+        val output = Decoupled(new AXIStream(DATA_WIDTH = 8,
+                                             KEEP_EN = false,
+                                             LAST_EN = true,
+                                             ID_WIDTH = 0,
+                                             DEST_WIDTH = 0,
+                                             USER_WIDTH = 1))
+    })
+
+    val arbiter = Module(new Arbiter(N_INPUTS = N_INPUTS,
+                                     ROUND_ROBIN = false,
+                                     BLOCKING = true,
+                                     RELEASE = true))
+                                     
+    for (i <- 0 until N_INPUTS) {
+        arbiter.io.request(i) := io.input_headers(i).valid
+        arbiter.io.acknowledge(i) := io.inputs(i).bits.tlast.get
+        io.input_headers(i).ready := arbiter.io.chosen_oh(i) & io.output_header.ready
+        io.inputs(i).ready := arbiter.io.chosen_oh(i) & io.output.ready
+    }
+
+    io.output_header.valid := io.input_headers(arbiter.io.chosen).valid
+    io.output_header.bits := io.input_headers(arbiter.io.chosen).bits
+
+    io.output.valid := io.inputs(arbiter.io.chosen).valid
+    io.output.bits := io.inputs(arbiter.io.chosen).bits
+}
+
 class UDPFrame extends Module {
     val io = IO(new Bundle {
         val tx_udp_header = Flipped(Decoupled(new UDPFrameHeader))

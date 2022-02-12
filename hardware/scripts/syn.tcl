@@ -10,9 +10,9 @@ read_xdc [ glob $hardware_root/src/constraints/*.xdc ]
 
 set_property part xc7a200tsbg484-1 [ current_project ]
 
-#read_ip $hardware_root/src/ip/MemoryController/MemoryController.xci
-#generate_target all [ get_files *MemoryController.xci ]
-#synth_ip [ get_files *MemoryController.xci ]
+read_ip $hardware_root/src/ip/MemoryController/MemoryController.xci
+generate_target all [ get_files *MemoryController.xci ]
+synth_ip [ get_files *MemoryController.xci ]
 
 synth_design -top syn -part xc7a200tsbg484-1
 write_checkpoint -force $output_dir/post_synth.dcp

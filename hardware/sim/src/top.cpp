@@ -1,14 +1,31 @@
 #include <stdlib.h>
+#include <signal.h>
 #include <memory>
 #include "Vtb.h"
 #include "verilated.h"
+#include "verilated_vcd_c.h"
 #include "clocks.h"
 
+Vtb* tb;
+VerilatedVcdC* tfp;
+
+void signal_callback_handler(int signum) {
+    tfp->close();
+    tb->final();
+    // Terminate program
+    exit(signum);
+}
+
 int main(int argc, char** argv, char** env) {
+    signal(SIGINT, signal_callback_handler);
+
     const std::unique_ptr<VerilatedContext> contextp(new VerilatedContext);
     contextp->traceEverOn(true);
     contextp->commandArgs(argc, argv);
-    const std::unique_ptr<Vtb> tb(new Vtb(contextp.get(), "TOP"));
+    tb = new Vtb(contextp.get(), "TOP");
+    tfp = new VerilatedVcdC;
+    tb->trace(tfp, 99);
+    tfp->open("tb.vcd");
 
     Clocks clocks;
     const std::shared_ptr<Clock> top_clock(new Clock(5000));
@@ -26,6 +43,8 @@ int main(int argc, char** argv, char** env) {
     tb->i_ethernet_clock = ethernet_clock->get_state();
     tb->i_ethernet_clock_90 = ethernet_clock_90->get_state();
     tb->eval();
+    tfp->dump(contextp->time());
+    tfp->flush();
     // Tick the clock until we are done
     while(!contextp->gotFinish()) {
         contextp->timeInc(clocks.next_edge());
@@ -37,8 +56,10 @@ int main(int argc, char** argv, char** env) {
         tb->i_ethernet_clock = ethernet_clock->get_state();
         tb->i_ethernet_clock_90 = ethernet_clock_90->get_state();
         tb->eval();
+        tfp->dump(contextp->time());
+        tfp->flush();
     }
-    
+    tfp->close();
     tb->final();
     return 0;
 }

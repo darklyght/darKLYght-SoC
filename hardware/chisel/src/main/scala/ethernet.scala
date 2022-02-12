@@ -78,13 +78,7 @@ class EthernetFrameMux(val N_INPUTS: Int) extends Module {
                                      ROUND_ROBIN = false,
                                      BLOCKING = true,
                                      RELEASE = true))
-    // val output_fifo = Module(new Queue(new AXIStream(DATA_WIDTH = 8,
-    //                                                  KEEP_EN = false,
-    //                                                  LAST_EN = true,
-    //                                                  ID_WIDTH = 0,
-    //                                                  DEST_WIDTH = 0,
-    //                                                  USER_WIDTH = 1), 8))
-
+                                     
     for (i <- 0 until N_INPUTS) {
         arbiter.io.request(i) := io.input_headers(i).valid
         arbiter.io.acknowledge(i) := io.inputs(i).bits.tlast.get

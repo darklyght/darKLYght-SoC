@@ -17,6 +17,44 @@ class AXIStream(val DATA_WIDTH: Int = 8,
     val tuser = if (USER_WIDTH > 0) Some(UInt(USER_WIDTH.W)) else None
 }
 
+class AXI4Full(val DATA_WIDTH: Int, val ADDR_WIDTH: Int, val ID_WIDTH: Int) extends Bundle {
+    val aw = Irrevocable(new AXI4FullA(ADDR_WIDTH, ID_WIDTH))
+    val w = Irrevocable(new AXI4FullW(DATA_WIDTH))
+    val b = Flipped(Irrevocable(new AXI4FullB(ID_WIDTH)))
+    val ar = Irrevocable(new AXI4FullA(ADDR_WIDTH, ID_WIDTH))
+    val r = Flipped(Irrevocable(new AXI4FullR(DATA_WIDTH, ID_WIDTH)))
+}
+
+class AXI4FullA(val ADDR_WIDTH: Int, val ID_WIDTH: Int) extends Bundle {
+    val id = UInt(ID_WIDTH.W)
+    val addr = UInt(ADDR_WIDTH.W)
+    val len = UInt(8.W)
+    val size = UInt(3.W)
+    val burst = UInt(2.W)
+    val lock = UInt(1.W)
+    val cache = UInt(4.W)
+    val prot = UInt(3.W)
+    val qos = UInt(4.W)
+}
+
+class AXI4FullW(val DATA_WIDTH: Int) extends Bundle {
+    val data = UInt(DATA_WIDTH.W)
+    val strb = UInt((DATA_WIDTH/8).W)
+    val last = Bool()
+}
+
+class AXI4FullB(val ID_WIDTH: Int) extends Bundle {
+    val id = UInt(ID_WIDTH.W)
+    val resp = UInt(2.W)
+}
+
+class AXI4FullR(val DATA_WIDTH: Int, val ID_WIDTH: Int) extends Bundle {
+    val id = UInt(ID_WIDTH.W)
+    val data = UInt(DATA_WIDTH.W)
+    val resp = UInt(2.W)
+    val last = Bool()
+}
+
 class AXIStreamAsyncFIFO(val DATA_WIDTH: Int = 8,
                          val KEEP_EN: Boolean = true,
                          val LAST_EN: Boolean = true,
@@ -33,3 +71,9 @@ class AXIStreamAsyncFIFO(val DATA_WIDTH: Int = 8,
                                                                                              ID_WIDTH = ID_WIDTH,
                                                                                              DEST_WIDTH = DEST_WIDTH,
                                                                                              USER_WIDTH = USER_WIDTH))
+
+class EthernetAXIShim(val N_SLAVES: Int, val PORTS: Seq[Bits], val DATA_WIDTH: Int, val ADDR_WIDTH: Int, val ID_WIDTH: Int) extends Module {
+    val io = IO(new Bundle {
+        val M_AXI = Vec(N_SLAVES, new AXI4Full(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH))
+    })
+}

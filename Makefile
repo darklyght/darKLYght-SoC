@@ -22,12 +22,12 @@ VERILATOR_BIN = $(shell which verilator)
 VIVADO_BIN = $(shell which vivado)
 
 $(HARD_SRC_DIR)/hdl/top.v: $(ROOT)/hardware/chisel/build.sbt $(HARD_SBT_LIST)
-	cd $(HARD_SBT_DIR) && $(SBT_BIN) 'runMain project.Instance -X mverilog --top-name top --target-dir $(HARD_SRC_DIR)/hdl'
+	cd $(HARD_SBT_DIR) && $(SBT_BIN) 'runMain project.Instance'
 
 sbt: $(HARD_SRC_DIR)/hdl/top.v
 
 sim: $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(HARD_SIM_CLIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v)
-	$(VERILATOR_BIN) -LDFLAGS "-g -lutil" -CFLAGS "-g -I${HARD_SIM_DIR}/include" --cc --trace-fst $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include +define+SIMULATION --top-module tb --threads 12 --threads-dpi all --exe $(HARD_SIM_CLIST) --build
+	$(VERILATOR_BIN) -LDFLAGS "-g -lutil" -CFLAGS "-g -I${HARD_SIM_DIR}/include" --cc --trace $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include +define+SIMULATION --top-module tb --threads 12 --threads-dpi all --exe $(HARD_SIM_CLIST) --build
 	cd $(HARD_SIM_DIR)/build/ && sudo ./Vtb
 
 $(HARD_BUILD_DIR)/post_synth.dcp: $(HARD_SRC_DIR)/syn.v $(HARD_SRC_LIST) $(HARD_SYN_CON) $(HARD_SYN_TCL)
@@ -52,6 +52,7 @@ clean:
 	-rm -rf $(ROOT)/.hbs
 	-rm -rf $(ROOT)/.Xil
 	-rm -rf $(ROOT)/.vscode
+	-rm -rf $(ROOT)/*.gen
 	-rm -rf $(HARD_SBT_DIR)/project
 	-rm -rf $(HARD_SBT_DIR)/target
 	-rm -rf $(HARD_SRC_DIR)/hdl/*

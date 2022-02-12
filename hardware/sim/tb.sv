@@ -5,11 +5,6 @@ module tb (
     input i_ethernet_clock_90,
     input i_reset
 );
-
-    initial begin
-        $dumpfile("tb.fst");
-        $dumpvars();
-    end
     
     wire uart_txr_i_uart_rx;
     wire uart_txr_o_uart_tx;
