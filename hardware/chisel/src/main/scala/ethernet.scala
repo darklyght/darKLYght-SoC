@@ -298,10 +298,10 @@ class EthernetFrameRx extends Module {
     output_fifo.io.enq.bits := io.input.bits
     output_fifo.io.enq.valid := io.input.fire() && state === State.sPayload
 
-    when (io.header.fire()) {
-        header_valid := false.B
-    } .elsewhen (io.input.fire() && state === State.sHeader && frame_pointer === 13.U) {
+    when (io.input.fire() && state === State.sHeader && frame_pointer === 13.U) {
         header_valid := true.B
+    } .elsewhen (io.header.fire()) {
+        header_valid := false.B
     }
 
     switch (state) {

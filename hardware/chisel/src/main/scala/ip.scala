@@ -709,10 +709,10 @@ class IPFrameRx extends Module {
     output_fifo.io.enq.bits.tuser.get := io.ethernet_input.bits.tuser.get
     output_fifo.io.enq.valid := io.ethernet_input.fire() && state === State.sPayload
 
-    when (io.ip_header.fire()) {
-        header_valid := false.B
-    } .elsewhen (io.ethernet_input.fire() && state === State.sHeader && frame_pointer === 19.U) {
+    when (io.ethernet_input.fire() && state === State.sHeader && frame_pointer === 19.U) {
         header_valid := true.B
+    } .elsewhen (io.ip_header.fire()) {
+        header_valid := false.B
     }
 
     switch (state) {

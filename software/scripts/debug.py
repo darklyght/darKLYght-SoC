@@ -1,120 +1,108 @@
-import serial
+import socket
+import select
 import binascii
+import random
 import time
 
-PORT = '/dev/pts/1'
-BAUD = 115200
+TARGET_IP = "192.168.1.128"
+TARGET_PORT = 1234
+# TARGET_IP = "127.0.0.128"
+# TARGET_PORT = 8000
+ERROR_COUNT = 0
 
-read_bit = {'0': '0',
-            '1': '1',
-            '2': '2',
-            '3': '3',
-            '4': '4',
-            '5': '5',
-            '6': '6',
-            '7': '7',
-            '8': '0',
-            '9': '1',
-            'A': '2',
-            'B': '3',
-            'C': '4',
-            'D': '5',
-            'E': '6',
-            'F': '7'}
-write_bit = {'0': '8',
-             '1': '9',
-             '2': 'A',
-             '3': 'B',
-             '4': 'C',
-             '5': 'D',
-             '6': 'E',
-             '7': 'F',
-             '8': '8',
-             '9': '9',
-             'A': 'A',
-             'B': 'B',
-             'C': 'C',
-             'D': 'D',
-             'E': 'E',
-             'F': 'F'}
+def raw_read(udp_sock, packet, length):
+    # global ERROR_COUNT
+    udp_sock.sendto(packet, (TARGET_IP, TARGET_PORT))
+    # select.select([udp_sock], [], [], 0)
+    data, addr = udp_sock.recvfrom(length)
+    if len(data) != length:
+        # print("Incorrect length received. Retrying")
+        # ERROR_COUNT += 1
+        return False
+    return data
 
-def read(address):
-    address = address.zfill(8)
-    address = address.upper()
-    address = read_bit[address[0]] + address[1:8]
-    ser = serial.Serial(PORT, BAUD)
-    time.sleep(0.1)
-    ser.write(binascii.unhexlify(address))
-    print(binascii.hexlify(ser.read(4)))
+def raw_write(udp_sock, packet):
+    udp_sock.sendto(packet, (TARGET_IP, TARGET_PORT))
+    # select.select([udp_sock], [], [], 0)
+    data, addr = udp_sock.recvfrom(1)
+    return binascii.hexlify(data) == b"00"
 
-def write(address, data):
-    address = address.zfill(8)
-    data = data.zfill(8)
-    address = address.upper()
-    address =  write_bit[address[0]] + address[1:8]
-    ser = serial.Serial(PORT, BAUD)
-    #time.sleep(0.1)
-    ser.write(binascii.unhexlify(address + data))
-    #address = read_bit[address[0]] + address[1:8]
-    #read(address)
+def read(udp_sock, address, length):
+    assert(length <= 256), "Trying to read more than 256 words."
+    # global ERROR_COUNT
+    packet = ''
+    packet = packet + "0".zfill(2) # R/W bit - 0 for read
+    packet = packet + address.zfill(8).upper() # 32-bit address
+    packet = packet + '{:02x}'.format(length - 1) # length - 1 because 0 represents 1 word read
+    packet = binascii.unhexlify(packet)
+    rv = False
+    try:
+        rv = raw_read(udp_sock, packet, length * 4)
+    except (socket.timeout, BlockingIOError):
+        pass
+        # print("Did not receive response on read. Trying again.")
+        # ERROR_COUNT += 1
+    while not rv:
+        try:
+            rv = raw_read(udp_sock, packet, length * 4)
+        except (socket.timeout, BlockingIOError):
+            pass
+            # print("Did not receive response on read. Trying again.")
+            # ERROR_COUNT += 1
+    data = [ binascii.hexlify(rv[i:i+4]) for i in range(0, length * 4, 4) ]
+    return data
 
-if __name__ == '__main__':
-#    write("20000004", "1000000")
-#    write("20008000", "1aa")
-#    print("DRAM Check\n")
-#    tic = time.perf_counter()
-#    for i in range(0, 1000, 4):
-#        write(hex(i)[2:], hex(i)[2:])
-#    toc = time.perf_counter()
-#    print(f"Wrote took {toc - tic:0.4f} seconds")
-#    for i in range(0, 100, 4):
-#        read(hex(i)[2:])
-#    
-#    print("\n\nTimer Check\n")
-#    write("20000004", "186a0")
-#    for i in range(0, 100):
-#        read("20000000")
-#
-#    print("\n\nLED Check\n")
-#    write("20008000", "0")
-#    for i in range(0, 3):
-#        write("20004000", "ff")
-#        time.sleep(1)
-#        write("20004000", "0")
-#        time.sleep(1)
-#
-#    print("\n\nBlink Check\n")
-#    write("20000004", "17d7840")
-#    write("20008000", "1aa")
-#    time.sleep(3)
-#    write("20008000", "0")
-#    write("20004000", "0")
+def write(udp_sock, address, data):
+    assert(len(data) <= 256), "Data longer than 256 words."
+    # global ERROR_COUNT
+    packet = ''
+    packet = packet + "1".zfill(2) # R/W bit - 1 for write
+    packet = packet + address.zfill(8).upper() # 32-bit address
+    packet = packet + '{:02x}'.format(len(data) - 1) # length - 1 because 0 represents 1 word write
+    packet = packet + ''.join([ word.zfill(8).upper() for word in data ])
+    packet = binascii.unhexlify(packet)
+    rv = False
+    try:
+        rv = raw_write(udp_sock, packet)
+    except (socket.timeout, BlockingIOError):
+        pass
+        # print("Did not receive response on write. Trying again.")
+        # ERROR_COUNT += 1
+    while not rv:
+        try:
+            rv = raw_write(udp_sock, packet)
+        except (socket.timeout, BlockingIOError):
+            pass
+            # print("Did not receive response on write. Trying again.")
+            # ERROR_COUNT += 1
+    return len(data)
 
-#    print("\n\nAudio Check\n")
-#    write("21100000", "0")
-#    write("21100004", "80075300")
 
-#    for i in range(256):
-#        write(hex(i*4)[2:], hex(i*65536)[2:])
-#    with open('music.txt', 'r') as f:
-#        lines = f.readlines()
-#        for i in range(480000):
-#            write(hex(i*4)[2:], lines[i].strip())
+udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udp_sock.bind(("192.168.1.8", 40000))
+udp_sock.settimeout(0.000001)
 
-    write("22000000", "0")
-    write("22000010", "00600000")
-    write("22000018", "00FF0000")
-    write("22000004", "400")
-    write("22000000", "1")
-   # read("22000000")
-    #read("22000010")
-    #read("22000018")
-    #read("22000004")
-    #read("22004004")
-    #read("2200400C")
-    #read("22004014")
-    #read("2200401C")
-    #read("22004024")
-    #read("2200402C")
-    #read("22004034")
-    #read("2200403C")
+random_data = ['%08x' % random.randrange(16**8) for n in range(256)]
+
+start = time.time()
+for i in range(0, 10000):
+    # print(i)
+    # random_data = ['%08x' % random.randrange(16**8) for n in range(256)]
+    write(udp_sock, "00000000", random_data)
+    data = read(udp_sock, "00000000", 256)
+    error = False
+
+    for j in range(0, 256):
+        if binascii.hexlify(binascii.unhexlify(random_data[j])) != data[j]:
+            error = True
+            break
+    
+    if error:
+        print(random_data, data)
+        print(i, "Error")
+        exit(1)
+
+end = time.time()
+print(end - start)
+
+# print(str(ERROR_COUNT) + " errors")

@@ -286,10 +286,10 @@ class UDPFrameRx extends Module {
     val header_checksum_part = Wire(UInt(32.W))
     header_checksum_part := header_checksum(15, 0) +& header_checksum(31, 16)
 
-    when (io.udp_header.fire()) {
-        header_valid := false.B
-    } .elsewhen (io.ip_input.fire() && state === State.sHeader && frame_pointer === 7.U) {
+    when (io.ip_input.fire() && state === State.sHeader && frame_pointer === 7.U) {
         header_valid := true.B
+    } .elsewhen (io.udp_header.fire()) {
+        header_valid := false.B
     }
 
     switch (state) {
