@@ -686,7 +686,11 @@ class IPFrameRx extends Module {
     val error_invalid_checksum = RegInit(false.B)
 
     val header_checksum_int = Wire(UInt(17.W))
-    header_checksum_int := header_checksum +& Cat(io.ethernet_input.bits.tdata, 0.U(8.W))
+    when (frame_pointer(0) === 0.U) {
+        header_checksum_int := header_checksum +& Cat(io.ethernet_input.bits.tdata, 0.U(8.W))
+    } .otherwise {
+        header_checksum_int := header_checksum +& Cat(0.U(8.W), io.ethernet_input.bits.tdata)
+    }
 
     object State extends ChiselEnum {
         val sIdle, sHeader, sPayload, sEnd = Value
@@ -730,7 +734,7 @@ class IPFrameRx extends Module {
                 frame_pointer := 1.U
                 header.version := io.ethernet_input.bits.tdata(7, 4)
                 header.ihl := io.ethernet_input.bits.tdata(3, 0)
-                header_checksum := Cat(0.U(8.W), io.ethernet_input.bits.tdata)
+                header_checksum := Cat(io.ethernet_input.bits.tdata, 0.U(8.W))
                 busy := true.B
             }
         }
@@ -753,11 +757,7 @@ class IPFrameRx extends Module {
                         state := State.sPayload
                     }
                 }
-                when (frame_pointer(0) === 1.U) {
-                    header_checksum := header_checksum_int(15, 0) + header_checksum_int(16)
-                } .otherwise {
-                    header_checksum := header_checksum + Cat(0.U(8.W), io.ethernet_input.bits.tdata)
-                }
+                header_checksum := header_checksum_int(15, 0) + header_checksum_int(16)
                 switch (frame_pointer) {
                     is (1.U) {
                         header.dscp := io.ethernet_input.bits.tdata(7, 2)

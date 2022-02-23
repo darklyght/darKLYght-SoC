@@ -74,7 +74,7 @@ class EthernetFrameMux(val N_INPUTS: Int) extends Module {
                                              USER_WIDTH = 1))
     })
 
-    val arbiter = Module(new Arbiter(N_INPUTS = N_INPUTS,
+    val arbiter = Module(new LockingArbiter(N_INPUTS = N_INPUTS,
                                      ROUND_ROBIN = false,
                                      BLOCKING = true,
                                      RELEASE = true))
@@ -501,12 +501,6 @@ class EthernetPHY(val PADDING: Boolean, val MINIMUM_FRAME_LENGTH: Int) extends M
     mac.io.tx_in <> tx_fifo.io.deq
     mac.io.tx_mii_select := tx_mii_select
     mac.io.tx_ifg_delay := io.tx_ifg_delay
-
-    // mac.io.rx_out <> io.rx
-    // mac.io.rx_mii_select := rx_mii_select
-    // mac.io.tx_in <> io.tx
-    // mac.io.tx_mii_select := tx_mii_select
-    // mac.io.tx_ifg_delay := io.tx_ifg_delay
 
     val rx_reset = Wire(UInt(1.W))
     val tx_reset = Wire(UInt(1.W))

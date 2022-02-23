@@ -118,6 +118,8 @@ module syn (
     wire ethernet_clock;
     wire ethernet_clock90;
     wire ethernet_200clock;
+    wire ethernet_probe_int;
+    wire ethernet_probe;
 
     MMCME2_BASE #(
         .BANDWIDTH("OPTIMIZED"),
@@ -136,6 +138,9 @@ module syn (
         .CLKOUT2_DIVIDE(5),
         .CLKOUT2_PHASE(0.000),
         .CLKOUT2_DUTY_CYCLE(0.500),
+        .CLKOUT3_DIVIDE(4),
+        .CLKOUT3_PHASE(0.000),
+        .CLKOUT3_DUTY_CYCLE(0.500),
         .REF_JITTER1(0.010)
     ) ethernet_clock_mmcm (
         .CLKFBOUT(ethernet_clock_fb),
@@ -146,6 +151,8 @@ module syn (
         .CLKOUT1B(),
         .CLKOUT2(ethernet_200clock_int),
         .CLKOUT2B(),
+        .CLKOUT3(ethernet_probe_int),
+        .CLKOUT3B(),
         .CLKFBIN(ethernet_clock_fb),
         .CLKIN1(i_clock),
         .LOCKED(ethernet_clock_locked),
@@ -166,6 +173,11 @@ module syn (
     BUFG ethernet_200clock_bufg (
         .I(ethernet_200clock_int),
         .O(ethernet_200clock)
+    );
+
+    BUFG ethernet_probe_bufg (
+        .I(ethernet_probe_int),
+        .O(ethernet_probe)
     );
 
     wire [3:0] ethernet_rx_data_delay;
@@ -261,7 +273,7 @@ module syn (
         .REGRST(1'b0)
     );
 
-    wire [0:0] dram_axi_awid;
+    wire [7:0] dram_axi_awid;
     wire [31:0] dram_axi_awaddr;
     wire [7:0] dram_axi_awlen;
     wire [2:0] dram_axi_awsize;
@@ -277,11 +289,11 @@ module syn (
     wire dram_axi_wlast;
     wire dram_axi_wvalid;
     wire dram_axi_wready;
-    wire [0:0] dram_axi_bid;
+    wire [7:0] dram_axi_bid;
     wire [1:0] dram_axi_bresp;
     wire dram_axi_bvalid;
     wire dram_axi_bready;
-    wire [0:0] dram_axi_arid;
+    wire [7:0] dram_axi_arid;
     wire [31:0] dram_axi_araddr;
     wire [7:0] dram_axi_arlen;
     wire [2:0] dram_axi_arsize;
@@ -325,7 +337,7 @@ module syn (
         .app_sr_active(),
         .app_ref_ack(),
         .app_zq_ack(),
-        .s_axi_awid({7'b0, dram_axi_awid}),
+        .s_axi_awid(dram_axi_awid),
         .s_axi_awaddr(dram_axi_awaddr[28:0]),
         .s_axi_awlen(dram_axi_awlen),
         .s_axi_awsize(dram_axi_awsize),
@@ -341,11 +353,11 @@ module syn (
         .s_axi_wlast(dram_axi_wlast),
         .s_axi_wvalid(dram_axi_wvalid),
         .s_axi_wready(dram_axi_wready),
-        .s_axi_bid({7'b0, dram_axi_bid}),
+        .s_axi_bid(dram_axi_bid),
         .s_axi_bresp(dram_axi_bresp),
         .s_axi_bvalid(dram_axi_bvalid),
         .s_axi_bready(dram_axi_bready),
-        .s_axi_arid({7'b0, dram_axi_arid}),
+        .s_axi_arid(dram_axi_arid),
         .s_axi_araddr(dram_axi_araddr[28:0]),
         .s_axi_arlen(dram_axi_arlen),
         .s_axi_arsize(dram_axi_arsize),

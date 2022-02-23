@@ -9,7 +9,8 @@ class top(val CLOCK_FREQUENCY: Int,
           val UART_BAUD_RATE: Int,
           val MAC: String,
           val IP: String,
-          val PORT: String,
+          val DEBUG_PORT: String,
+          val MASTER_PORT: String,
           val GATEWAY: String,
           val SUBNET: String) extends Module {
     val io = IO(new Bundle {
@@ -18,7 +19,7 @@ class top(val CLOCK_FREQUENCY: Int,
         val ethernet_clock = Input(Clock())
         val ethernet_clock_90 = Input(Clock())
         val ethernet = new RGMIIPHYDuplex()
-        val dram = new AXI4Full(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1)
+        val dram = new AXI4Full(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 8)
     })
 
     val reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
@@ -40,8 +41,28 @@ class top(val CLOCK_FREQUENCY: Int,
     io.uart.tx <> uart.io.uart.tx.serial
     uart.io.uart.tx.data <> uart.io.uart.rx.data
 
-    val network = Module (new Network(MAC = MAC, IP = IP, GATEWAY = GATEWAY, SUBNET = SUBNET))
-    val debugger = Module(new UDPToAXI4Full(MAC = MAC, IP = IP, PORT = PORT, DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1))
+    val network = Module(new Network(MAC = MAC, IP = IP, GATEWAY = GATEWAY, SUBNET = SUBNET))
+    val debugger = Module(new UDPToAXI4Full(MAC = MAC, IP = IP, PORT = DEBUG_PORT, DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1))
+    val remote_m = Module(new UDPToAXI4Full(MAC = MAC, IP = IP, PORT = MASTER_PORT, DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1))
+    val network_out = Module(new UDPFrameMux(N_INPUTS = 2))
+    val axi_xbar = Module(new AXICrossbar(DATA_WIDTH = 32,
+                                          ADDR_WIDTH = 32,
+                                          ID_WIDTH = 8,
+                                          N_MASTERS = 2,
+                                          N_SLAVES = 1,
+                                          SLAVE_ADDR = Seq(
+                                              Seq("h20000000".U),
+                                              Seq("h20000000".U)
+                                          ), 
+                                          SLAVE_MASK = Seq(
+                                              Seq("hE0000000".U),
+                                              Seq("hE0000000".U)
+                                          ),
+                                          ALLOWED = Seq(
+                                              Seq(true.B),
+                                              Seq(true.B)
+                                          )))
+    val dec_err_slave = Module(new DecErrSlave(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 8))
 
     network.clock := clock
     network.reset := reset_sync.io.output.asBool
@@ -50,12 +71,33 @@ class top(val CLOCK_FREQUENCY: Int,
     network.io.ethernet_reset := ethernet_reset_sync.io.output.asBool
     network.io.ethernet <> io.ethernet
 
-    debugger.io.M_AXI <> io.dram
-    debugger.io.output <> network.io.tx_input
-    debugger.io.output_header <> network.io.tx_header
+    network_out.io.inputs(0) <> debugger.io.output
+    network_out.io.input_headers(0) <> debugger.io.output_header
+    network_out.io.inputs(1) <> remote_m.io.output
+    network_out.io.input_headers(1) <> remote_m.io.output_header
+
+    network.io.tx_input <> network_out.io.output
+    network.io.tx_header <> network_out.io.output_header
+
+    debugger.io.M_AXI <> axi_xbar.io.S_AXI(0)
+    remote_m.io.M_AXI <> axi_xbar.io.S_AXI(1)
+    axi_xbar.io.S_AXI(0).aw.bits.id := 0.U
+    axi_xbar.io.S_AXI(0).ar.bits.id := 0.U
+    axi_xbar.io.S_AXI(1).aw.bits.id := 1.U
+    axi_xbar.io.S_AXI(1).ar.bits.id := 1.U
+    axi_xbar.io.M_AXI(0) <> io.dram
+    axi_xbar.io.M_AXI(1) <> dec_err_slave.io.S_AXI
+    // debugger.io.M_AXI <> io.dram
+    // debugger.io.output <> network.io.tx_input
+    // debugger.io.output_header <> network.io.tx_header
     debugger.io.input <> network.io.rx_output
     debugger.io.input_header <> network.io.rx_header
+    remote_m.io.input <> network.io.rx_output
+    remote_m.io.input_header <> network.io.rx_header
+    network.io.rx_output.ready := debugger.io.input.ready && remote_m.io.input.ready
+    network.io.rx_header.ready := debugger.io.input_header.ready && remote_m.io.input_header.ready
 
+    // Loopback
     // network.io.tx_input <> network.io.rx_output
     // network.io.tx_input.valid := network.io.rx_output.valid
     // network.io.tx_header.bits.ip.ethernet.src_mac := MAC.U(48.W)
@@ -91,7 +133,8 @@ object Instance extends App {
                                                                   UART_BAUD_RATE = 115200,
                                                                   MAC = "h000000000002",
                                                                   IP = "hC0A80180",
-                                                                  PORT = "h4D2",
+                                                                  DEBUG_PORT = "h4D2",
+                                                                  MASTER_PORT = "h4D3",
                                                                   GATEWAY = "hC0A80101",
                                                                   SUBNET = "hFFFFFFFF")))
     // (new chisel3.stage.ChiselStage).execute(
@@ -102,7 +145,8 @@ object Instance extends App {
     //                                                               UART_BAUD_RATE = 29491200,
     //                                                               MAC = "h000000000000",
     //                                                               IP = "h7F000080",
-    //                                                               PORT = "h1F40",
+    //                                                               DEBUG_PORT = "h1F40",
+    //                                                               MASTER_PORT = "h1F41",
     //                                                               GATEWAY = "h7F000001",
     //                                                               SUBNET = "hFFFFFFFF")))
     )

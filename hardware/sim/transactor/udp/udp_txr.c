@@ -156,7 +156,7 @@ void eth_rx(void* eth, char data, int last) {
             }
             if (port_index >= 0) {
                 udp_master_t* udp_port = ((eth_master_t*)eth)->ports[port_index];
-                sendto(((udp_master_t*)udp_port)->fd, data, strlen(data), 0, (struct sockaddr*)&(((udp_master_t*)udp_port)->client_address), ((udp_master_t*)udp_port)->client_address_length);
+                sendto(((udp_master_t*)udp_port)->fd, data, ((eth_master_t*)eth)->rx_pointer - 42, 0, (struct sockaddr*)&(((udp_master_t*)udp_port)->client_address), ((udp_master_t*)udp_port)->client_address_length);
                 ((eth_master_t*)eth)->rx_pointer = 0;
             }
         }

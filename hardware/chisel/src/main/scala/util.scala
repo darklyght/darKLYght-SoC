@@ -31,7 +31,7 @@ class SyncDebouncer(val CLOCK_FREQUENCY: Int, val SAMPLE_FREQUENCY: Int, val WID
     io.output := input_db | input_sync
 }
 
-class Arbiter(val N_INPUTS: Int,
+class LockingArbiter(val N_INPUTS: Int,
               val ROUND_ROBIN: Boolean,
               val BLOCKING: Boolean,
               val RELEASE: Boolean) extends Module {
@@ -55,7 +55,7 @@ class Arbiter(val N_INPUTS: Int,
             if (ROUND_ROBIN) {
                 chosen := PriorityEncoder(io.request.asUInt & mask.asUInt)
                 chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
-                mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0)
+                mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0).asSInt
             } else {
                 chosen := PriorityEncoder(io.request.asUInt)
                 chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
@@ -64,9 +64,9 @@ class Arbiter(val N_INPUTS: Int,
     } else if (BLOCKING && RELEASE) {
         when (io.request.asUInt.orR && (~((~io.acknowledge.asUInt & chosen_oh.asUInt).orR) || ~locked) && ~(io.request.asUInt & io.acknowledge.asUInt & chosen_oh.asUInt).orR) {
             if (ROUND_ROBIN) {
-                chosen := PriorityEncoder(io.request.asUInt & mask.asUInt)
-                chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
-                mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0)
+                chosen := PriorityEncoder(Mux((io.request.asUInt & mask.asUInt).orR, io.request.asUInt & mask.asUInt, io.request.asUInt))
+                chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(Mux((io.request.asUInt & mask.asUInt).orR, io.request.asUInt & mask.asUInt, io.request.asUInt)))(N_INPUTS - 1, 0)
+                mask := (-1.S(N_INPUTS.W) << PriorityEncoder(Mux((io.request.asUInt & mask.asUInt).orR, io.request.asUInt & mask.asUInt, io.request.asUInt)))(N_INPUTS - 1, 0).asSInt
                 locked := true.B
             } else {
                 chosen := PriorityEncoder(io.request.asUInt)
@@ -80,7 +80,7 @@ class Arbiter(val N_INPUTS: Int,
         if (ROUND_ROBIN) {
             chosen := PriorityEncoder(io.request.asUInt & mask.asUInt)
             chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)
-            mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0)
+            mask := (-1.S(N_INPUTS.W) << PriorityEncoder(io.request.asUInt & mask.asUInt))(N_INPUTS - 1, 0).asSInt
         } else {
             chosen := PriorityEncoder(io.request.asUInt)
             chosen_oh := (1.U(N_INPUTS.W) << PriorityEncoder(io.request.asUInt))(N_INPUTS - 1, 0)

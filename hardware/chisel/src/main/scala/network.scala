@@ -42,6 +42,7 @@ class UDPToAXI4Full(val MAC: String,
                                         ID_WIDTH = ID_WIDTH))
     val rx = Module(new UDPToAXI4FullRx(MAC = MAC,
                                         IP = IP,
+                                        PORT = PORT,
                                         DATA_WIDTH = DATA_WIDTH,
                                         ADDR_WIDTH = ADDR_WIDTH,
                                         ID_WIDTH = ID_WIDTH))
@@ -180,7 +181,7 @@ class UDPToAXI4FullTxR(val MAC: String,
     io.output_header.bits.ip.checksum := 0.U
     io.output_header.bits.dst_port := metadata_fifo.io.deq.bits.src_port
     io.output_header.bits.src_port := PORT.U(16.W)
-    io.output_header.bits.length := (metadata_fifo.io.deq.bits.length.get +& 1.U) * 4.U + 8.U
+    io.output_header.bits.length := (metadata_fifo.io.deq.bits.length.get +& 1.U) * 4.U + 1.U + 8.U // Data + Response + Header
     io.output_header.bits.checksum := 0.U
     io.r.ready := input_fifo.io.enq.ready
     io.r_metadata <> metadata_fifo.io.enq
@@ -259,7 +260,12 @@ class UDPToAXI4FullTx(val MAC: String,
     io.output_header <> udp_mux.io.output_header
 }
 
-class UDPToAXI4FullRx(val MAC: String, val IP: String, val DATA_WIDTH: Int = 32, val ADDR_WIDTH: Int = 32, val ID_WIDTH: Int = 1) extends Module {
+class UDPToAXI4FullRx(val MAC: String,
+                      val IP: String,
+                      val PORT: String,
+                      val DATA_WIDTH: Int = 32,
+                      val ADDR_WIDTH: Int = 32,
+                      val ID_WIDTH: Int = 1) extends Module {
     val io = IO(new Bundle {
         val input = Flipped(Decoupled(new AXIStream(DATA_WIDTH = 8,
                                                     KEEP_EN = false,
@@ -360,7 +366,7 @@ class UDPToAXI4FullRx(val MAC: String, val IP: String, val DATA_WIDTH: Int = 32,
 
     switch (state) {
         is (State.sIdle) {
-            when (io.input_header.fire() && io.input_header.bits.ip.dst_ip === IP.U(32.W) && io.input_header.bits.ip.ethernet.dst_mac === MAC.U(48.W)) {
+            when (io.input_header.fire() && io.input_header.bits.dst_port === PORT.U(16.W) && io.input_header.bits.ip.dst_ip === IP.U(32.W) && io.input_header.bits.ip.ethernet.dst_mac === MAC.U(48.W)) {
                 state := State.sHeader
                 frame_pointer := 0.U
                 udp_header := io.input_header.bits
@@ -430,57 +436,6 @@ class UDPToAXI4FullRx(val MAC: String, val IP: String, val DATA_WIDTH: Int = 32,
     }
 }
 
-class UDPFilter(val MAC: String,
-                val IP: String) extends Module {
-    val io = IO(new Bundle {
-        val input = Flipped(Decoupled(new AXIStream(DATA_WIDTH = 8,
-                                                    KEEP_EN = false,
-                                                    LAST_EN = true,
-                                                    ID_WIDTH = 0,
-                                                    DEST_WIDTH = 0,
-                                                    USER_WIDTH = 1)))
-        val input_header = Flipped(Decoupled(new UDPFrameHeader))
-        val output = Decoupled(new AXIStream(DATA_WIDTH = 8,
-                                             KEEP_EN = false,
-                                             LAST_EN = true,
-                                             ID_WIDTH = 0,
-                                             DEST_WIDTH = 0,
-                                             USER_WIDTH = 1))
-        val output_header = Decoupled(new UDPFrameHeader)
-    })
-    object State extends ChiselEnum {
-        val sIdle, sPayload = Value
-    }
-
-    val state = RegInit(State.sIdle)    
-    val packet_valid = RegInit(false.B)
-
-    switch (state) {
-        is (State.sIdle) {
-            when (io.input_header.fire()) {
-                state := State.sPayload
-            }
-        }
-        is (State.sPayload) {
-            when (io.input.fire() && io.input.bits.tlast.get) {
-                state := State.sIdle
-            }
-        }
-    }
-
-    when (state === State.sIdle && io.input_header.fire()) {
-        packet_valid := io.input_header.bits.ip.dst_ip === IP.U(32.W) && io.input_header.bits.ip.ethernet.dst_mac === MAC.U(32.W)
-    }
-
-    io.input <> io.output
-    io.input_header <> io.output_header
-    io.output_header.valid := io.input_header.valid && (io.input_header.bits.ip.dst_ip === IP.U(32.W) && io.input_header.bits.ip.ethernet.dst_mac === MAC.U(48.W))
-    io.input_header.ready := io.output_header.ready
-
-    io.output.valid := io.input.valid && packet_valid
-    io.input.ready := io.output.ready
-}
-
 class Network(val MAC: String,
               val IP: String,
               val GATEWAY: String,
@@ -512,7 +467,6 @@ class Network(val MAC: String,
     val arp_frame = Module(new ARPFrame)
     val ethernet_mux = Module(new EthernetFrameMux(N_INPUTS = 2))
     val udp_frame = Module(new UDPFrame)
-    // val udp_filter = Module(new UDPFilter(MAC = MAC, IP = IP))
 
     ethernet_phy.io.phy_clock := io.ethernet_clock
     ethernet_phy.io.phy_clock_90 := io.ethernet_clock_90
@@ -549,10 +503,6 @@ class Network(val MAC: String,
     ip_frame.io.tx_ip_header <> udp_frame.io.tx_ip_header
     ip_frame.io.tx_ip_input <> udp_frame.io.tx_ip_output
 
-    // udp_frame.io.rx_udp_header <> udp_filter.io.input_header
-    // udp_frame.io.rx_udp_output <> udp_filter.io.input
-    // udp_filter.io.output_header <> io.rx_header
-    // udp_filter.io.output <> io.rx_output
     udp_frame.io.rx_udp_header <> io.rx_header
     udp_frame.io.rx_udp_output <> io.rx_output
     udp_frame.io.tx_udp_header <> io.tx_header
