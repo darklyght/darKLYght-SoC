@@ -25,14 +25,14 @@ set_clock_groups -asynchronous -group [get_clocks {i_ethernet_rx_clock ethernet_
 
 
 ## LEDs
-set_property -dict { PACKAGE_PIN T14   IOSTANDARD LVCMOS25 } [get_ports { o_init_calib_complete }]; #IO_L15P_T2_DQS_13 Sch=led[0]
-#set_property -dict { PACKAGE_PIN T15   IOSTANDARD LVCMOS25 } [get_ports { o_led[1] }]; #IO_L15N_T2_DQS_13 Sch=led[1]
-#set_property -dict { PACKAGE_PIN T16   IOSTANDARD LVCMOS25 } [get_ports { o_led[2] }]; #IO_L17P_T2_13 Sch=led[2]
-#set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS25 } [get_ports { o_led[3] }]; #IO_L17N_T2_13 Sch=led[3]
-#set_property -dict { PACKAGE_PIN V15   IOSTANDARD LVCMOS25 } [get_ports { o_led[4] }]; #IO_L14N_T2_SRCC_13 Sch=led[4]
-#set_property -dict { PACKAGE_PIN W16   IOSTANDARD LVCMOS25 } [get_ports { o_led[5] }]; #IO_L16N_T2_13 Sch=led[5]
-#set_property -dict { PACKAGE_PIN W15   IOSTANDARD LVCMOS25 } [get_ports { o_led[6] }]; #IO_L16P_T2_13 Sch=led[6]
-#set_property -dict { PACKAGE_PIN Y13   IOSTANDARD LVCMOS25 } [get_ports { o_led[7] }]; #IO_L5P_T0_13 Sch=led[7]
+set_property -dict { PACKAGE_PIN T14   IOSTANDARD LVCMOS25 } [get_ports { o_led[0] }]; #IO_L15P_T2_DQS_13 Sch=led[0]
+set_property -dict { PACKAGE_PIN T15   IOSTANDARD LVCMOS25 } [get_ports { o_led[1] }]; #IO_L15N_T2_DQS_13 Sch=led[1]
+set_property -dict { PACKAGE_PIN T16   IOSTANDARD LVCMOS25 } [get_ports { o_led[2] }]; #IO_L17P_T2_13 Sch=led[2]
+set_property -dict { PACKAGE_PIN U16   IOSTANDARD LVCMOS25 } [get_ports { o_led[3] }]; #IO_L17N_T2_13 Sch=led[3]
+set_property -dict { PACKAGE_PIN V15   IOSTANDARD LVCMOS25 } [get_ports { o_led[4] }]; #IO_L14N_T2_SRCC_13 Sch=led[4]
+set_property -dict { PACKAGE_PIN W16   IOSTANDARD LVCMOS25 } [get_ports { o_led[5] }]; #IO_L16N_T2_13 Sch=led[5]
+set_property -dict { PACKAGE_PIN W15   IOSTANDARD LVCMOS25 } [get_ports { o_led[6] }]; #IO_L16P_T2_13 Sch=led[6]
+set_property -dict { PACKAGE_PIN Y13   IOSTANDARD LVCMOS25 } [get_ports { o_led[7] }]; #IO_L5P_T0_13 Sch=led[7]
 
 
 ## Buttons
@@ -45,14 +45,14 @@ set_property -dict { PACKAGE_PIN G4  IOSTANDARD LVCMOS15 } [get_ports { i_reset_
 
 
 ## Switches
-#set_property -dict { PACKAGE_PIN E22  IOSTANDARD LVCMOS12 } [get_ports { io_switches[0] }]; #IO_L22P_T3_16 Sch=sw[0]
-#set_property -dict { PACKAGE_PIN F21  IOSTANDARD LVCMOS12 } [get_ports { io_switches[1] }]; #IO_25_16 Sch=sw[1]
-#set_property -dict { PACKAGE_PIN G21  IOSTANDARD LVCMOS12 } [get_ports { io_switches[2] }]; #IO_L24P_T3_16 Sch=sw[2]
-#set_property -dict { PACKAGE_PIN G22  IOSTANDARD LVCMOS12 } [get_ports { io_switches[3] }]; #IO_L24N_T3_16 Sch=sw[3]
-#set_property -dict { PACKAGE_PIN H17  IOSTANDARD LVCMOS12 } [get_ports { sw[4] }]; #IO_L6P_T0_15 Sch=sw[4]
-#set_property -dict { PACKAGE_PIN J16  IOSTANDARD LVCMOS12 } [get_ports { sw[5] }]; #IO_0_15 Sch=sw[5]
-#set_property -dict { PACKAGE_PIN K13  IOSTANDARD LVCMOS12 } [get_ports { sw[6] }]; #IO_L19P_T3_A22_15 Sch=sw[6]
-#set_property -dict { PACKAGE_PIN M17  IOSTANDARD LVCMOS12 } [get_ports { sw[7] }]; #IO_25_15 Sch=sw[7]
+set_property -dict { PACKAGE_PIN E22  IOSTANDARD LVCMOS12 } [get_ports { i_switch[0] }]; #IO_L22P_T3_16 Sch=sw[0]
+set_property -dict { PACKAGE_PIN F21  IOSTANDARD LVCMOS12 } [get_ports { i_switch[1] }]; #IO_25_16 Sch=sw[1]
+set_property -dict { PACKAGE_PIN G21  IOSTANDARD LVCMOS12 } [get_ports { i_switch[2] }]; #IO_L24P_T3_16 Sch=sw[2]
+set_property -dict { PACKAGE_PIN G22  IOSTANDARD LVCMOS12 } [get_ports { i_switch[3] }]; #IO_L24N_T3_16 Sch=sw[3]
+set_property -dict { PACKAGE_PIN H17  IOSTANDARD LVCMOS12 } [get_ports { i_switch[4] }]; #IO_L6P_T0_15 Sch=sw[4]
+set_property -dict { PACKAGE_PIN J16  IOSTANDARD LVCMOS12 } [get_ports { i_switch[5] }]; #IO_0_15 Sch=sw[5]
+set_property -dict { PACKAGE_PIN K13  IOSTANDARD LVCMOS12 } [get_ports { i_switch[6] }]; #IO_L19P_T3_A22_15 Sch=sw[6]
+set_property -dict { PACKAGE_PIN M17  IOSTANDARD LVCMOS12 } [get_ports { i_switch[7] }]; #IO_25_15 Sch=sw[7]
 
 
 ## OLED Display

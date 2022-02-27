@@ -20,6 +20,8 @@ class top(val CLOCK_FREQUENCY: Int,
         val ethernet_clock_90 = Input(Clock())
         val ethernet = new RGMIIPHYDuplex()
         val dram = new AXI4Full(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 8)
+        val led = Output(UInt(8.W))
+        val switch = Input(UInt(8.W))
     })
 
     val reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
@@ -49,20 +51,32 @@ class top(val CLOCK_FREQUENCY: Int,
                                           ADDR_WIDTH = 32,
                                           ID_WIDTH = 8,
                                           N_MASTERS = 2,
-                                          N_SLAVES = 1,
+                                          N_SLAVES = 2,
                                           SLAVE_ADDR = Seq(
-                                              Seq("h20000000".U),
-                                              Seq("h20000000".U)
+                                              Seq("h20000000".U, "h00001000".U),
+                                              Seq("h20000000".U, "h00001000".U)
                                           ), 
                                           SLAVE_MASK = Seq(
-                                              Seq("hE0000000".U),
-                                              Seq("hE0000000".U)
+                                              Seq("hE0000000".U, "hFFFFFFC0".U),
+                                              Seq("hE0000000".U, "hFFFFFFC0".U)
                                           ),
                                           ALLOWED = Seq(
-                                              Seq(true.B),
-                                              Seq(true.B)
+                                              Seq(true.B, true.B),
+                                              Seq(true.B, true.B)
                                           )))
-    val dec_err_slave = Module(new DecErrSlave(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 8))
+    val REG_FILE_DATA_WIDTH = 32
+    val REG_FILE_ADDR_WIDTH = 6
+    val REG_FILE_ADDR_WIDTH_EFF = REG_FILE_ADDR_WIDTH - log2Ceil(REG_FILE_DATA_WIDTH / 8)
+    val register_file = Module(new AXIRegisterFile(DATA_WIDTH = REG_FILE_DATA_WIDTH, ADDR_WIDTH = REG_FILE_ADDR_WIDTH, ID_WIDTH = 8))
+    for (r <- 0 until math.pow(2, REG_FILE_ADDR_WIDTH_EFF).toInt) {
+        register_file.io.input(r) := 0.U(REG_FILE_DATA_WIDTH.W)
+    }
+    register_file.io.input(1) := Cat(0.U(24.W), io.switch)
+
+
+    io.led := register_file.io.output(0)(7, 0)
+
+    val err_slave = Module(new ErrSlave(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 8))
 
     network.clock := clock
     network.reset := reset_sync.io.output.asBool
@@ -86,10 +100,8 @@ class top(val CLOCK_FREQUENCY: Int,
     axi_xbar.io.S_AXI(1).aw.bits.id := 1.U
     axi_xbar.io.S_AXI(1).ar.bits.id := 1.U
     axi_xbar.io.M_AXI(0) <> io.dram
-    axi_xbar.io.M_AXI(1) <> dec_err_slave.io.S_AXI
-    // debugger.io.M_AXI <> io.dram
-    // debugger.io.output <> network.io.tx_input
-    // debugger.io.output_header <> network.io.tx_header
+    axi_xbar.io.M_AXI(1) <> register_file.io.S_AXI
+    axi_xbar.io.M_AXI(2) <> err_slave.io.S_AXI
     debugger.io.input <> network.io.rx_output
     debugger.io.input_header <> network.io.rx_header
     remote_m.io.input <> network.io.rx_output
@@ -136,7 +148,7 @@ object Instance extends App {
                                                                   DEBUG_PORT = "h4D2",
                                                                   MASTER_PORT = "h4D3",
                                                                   GATEWAY = "hC0A80101",
-                                                                  SUBNET = "hFFFFFFFF")))
+                                                                  SUBNET = "hFFFFFFFF"))))
     // (new chisel3.stage.ChiselStage).execute(
     //     Array("-X", "mverilog", "--target-dir", "../src/hdl"),
     //     Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new top(CLOCK_FREQUENCY = 100000000,
@@ -148,6 +160,5 @@ object Instance extends App {
     //                                                               DEBUG_PORT = "h1F40",
     //                                                               MASTER_PORT = "h1F41",
     //                                                               GATEWAY = "h7F000001",
-    //                                                               SUBNET = "hFFFFFFFF")))
-    )
+    //                                                               SUBNET = "hFFFFFFFF"))))
 }

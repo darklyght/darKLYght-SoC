@@ -114,7 +114,7 @@ class AXICrossbarDecoder(val ADDR_WIDTH: Int,
     val decerr = Wire(Vec(1, Bool()))
     
     for (s <- 0 until N_SLAVES) {
-        prerequest(s) := (((io.input.addr ^ SLAVE_ADDR(s).asUInt()) & SLAVE_MASK(s).asUInt()) === 0.U) && ALLOWED(s)
+        prerequest(s) := (((io.input.addr ^ SLAVE_ADDR(s).asUInt()) & SLAVE_MASK(s).asUInt()) === 0.U) && ALLOWED(s) && (io.input.addr(ADDR_WIDTH - 1, 12) === (io.input.addr + io.input.len)(ADDR_WIDTH - 1, 12))
     }
     decerr(0) := ~(prerequest.asUInt.orR)
     
@@ -266,9 +266,9 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
         io.S_AXI(m).b.valid := false.B
     }
     
-    io.S_AXI(aw_master.io.deq.bits).b.valid := b_queue.io.deq.valid & aw_master.io.deq.valid
-    b_queue.io.deq.ready := io.S_AXI(aw_master.io.deq.bits).b.ready & aw_master.io.deq.valid
-    aw_master.io.deq.ready := b_queue.io.deq.fire()
+    io.S_AXI(b_queue.io.deq.bits.id).b.valid := b_queue.io.deq.valid
+    b_queue.io.deq.ready := io.S_AXI(b_queue.io.deq.bits.id).b.ready
+    aw_master.io.deq.ready := w_queue.io.deq.fire() && w_queue.io.deq.bits.last
     
     val ar_arbiter = Module(new RRArbiter(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), N_MASTERS))
     val ar_queue = Module(new Queue(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), 2))
@@ -293,14 +293,14 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
     }
     
     r_queue.io.enq <> io.M_AXI.r
-    io.S_AXI(ar_master.io.deq.bits).r.valid := r_queue.io.deq.valid & ar_master.io.deq.valid
-    r_queue.io.deq.ready := io.S_AXI(ar_master.io.deq.bits).r.ready & ar_master.io.deq.valid
-    ar_master.io.deq.ready := r_queue.io.deq.fire() & r_queue.io.deq.bits.last.asBool()
+    io.S_AXI(r_queue.io.deq.bits.id).r.valid := r_queue.io.deq.valid
+    r_queue.io.deq.ready := io.S_AXI(r_queue.io.deq.bits.id).r.ready
+    ar_master.io.deq.ready := ar_queue.io.deq.fire()
 }
 
-class DecErrSlave(val DATA_WIDTH: Int,
-                  val ADDR_WIDTH: Int,
-                  val ID_WIDTH: Int) extends Module {
+class ErrSlave(val DATA_WIDTH: Int,
+               val ADDR_WIDTH: Int,
+               val ID_WIDTH: Int) extends Module {
     val io = IO(new Bundle {
         val S_AXI = Flipped(new AXI4Full(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH))
     })
@@ -318,18 +318,20 @@ class DecErrSlave(val DATA_WIDTH: Int,
 
     val read_state = RegInit(StateRead.sIdle)
     val write_state = RegInit(StateWrite.sIdle)
+    val read_pointer = RegInit(0.U(8.W))
+    val write_pointer = RegInit(0.U(8.W))
 
     io.S_AXI.ar.ready := read_state === StateRead.sIdle
     io.S_AXI.r.bits.id := read_addr.id
     io.S_AXI.r.bits.data := 0.U(DATA_WIDTH.W)
-    io.S_AXI.r.bits.resp := 3.U(2.W)
-    io.S_AXI.r.bits.last := read_addr.len === 0.U
+    io.S_AXI.r.bits.resp := Mux((read_addr.addr(ADDR_WIDTH - 1, 12) === (read_addr.addr + read_addr.len)(ADDR_WIDTH - 1, 12)), 3.U(2.W), 2.U(2.W))
+    io.S_AXI.r.bits.last := read_pointer === 0.U
     io.S_AXI.r.valid := read_state === StateRead.sReadResp
 
     io.S_AXI.aw.ready := write_state === StateWrite.sIdle
     io.S_AXI.w.ready := write_state === StateWrite.sIdle || write_state === StateWrite.sWriteData
     io.S_AXI.b.bits.id := write_addr.id
-    io.S_AXI.b.bits.resp := 3.U(2.W)
+    io.S_AXI.b.bits.resp := Mux((write_addr.addr(ADDR_WIDTH - 1, 12) === (write_addr.addr + write_addr.len)(ADDR_WIDTH - 1, 12)), 3.U(2.W), 2.U(2.W))
     io.S_AXI.b.valid := write_state === StateWrite.sWriteResp
 
     switch (read_state) {
@@ -337,14 +339,15 @@ class DecErrSlave(val DATA_WIDTH: Int,
             when (io.S_AXI.ar.fire()) {
                 read_state := StateRead.sReadResp
                 read_addr := io.S_AXI.ar.bits
+                read_pointer := io.S_AXI.ar.bits.len
             }
         }
         is (StateRead.sReadResp) {
             when (io.S_AXI.r.fire()) {
-                when (read_addr.len === 0.U) {
+                when (read_pointer === 0.U) {
                     read_state := StateRead.sIdle
                 } .otherwise {
-                    read_addr.len := read_addr.len - 1.U
+                    read_pointer := read_pointer - 1.U
                 }
             }
         }
@@ -355,14 +358,139 @@ class DecErrSlave(val DATA_WIDTH: Int,
             when (io.S_AXI.aw.fire()) {
                 write_state := StateWrite.sWriteData
                 write_addr := io.S_AXI.aw.bits
+                write_pointer := io.S_AXI.aw.bits.len
             }
         }
         is (StateWrite.sWriteData) {
             when (io.S_AXI.w.fire()) {
-                when (write_addr.len === 0.U) {
+                when (write_pointer === 0.U) {
                     write_state := StateWrite.sWriteResp
                 } .otherwise {
-                    write_addr.len := write_addr.len - 1.U
+                    write_pointer := write_pointer - 1.U
+                }
+            }
+        }
+        is (StateWrite.sWriteResp) {
+            when (io.S_AXI.b.fire()) {
+                write_state := StateWrite.sIdle
+            }
+        }
+    }
+}
+
+class AXIRegisterFile(val DATA_WIDTH: Int,
+                      val ADDR_WIDTH: Int,
+                      val ID_WIDTH: Int) extends Module {
+    
+    val ADDR_WIDTH_EFF = ADDR_WIDTH - log2Ceil(DATA_WIDTH / 8)
+
+    val io = IO(new Bundle {
+        val S_AXI = Flipped(new AXI4Full(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH))
+        val input = Input(Vec(math.pow(2, ADDR_WIDTH_EFF).toInt, UInt(DATA_WIDTH.W)))
+        val output = Output(Vec(math.pow(2, ADDR_WIDTH_EFF).toInt, UInt(DATA_WIDTH.W)))
+    })
+
+    object StateRead extends ChiselEnum {
+        val sIdle, sReadResp = Value
+    }
+    
+    object StateWrite extends ChiselEnum {
+        val sIdle, sWriteData, sWriteResp = Value
+    }
+
+    val registers = RegInit(VecInit(Seq.fill(math.pow(2, ADDR_WIDTH_EFF).toInt)(0.U(DATA_WIDTH.W))))
+    val read_addr = Reg(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH))
+    val write_addr = Reg(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH))
+    val read_state = RegInit(StateRead.sIdle)
+    val write_state = RegInit(StateWrite.sIdle)
+    val read_pointer = RegInit(0.U(8.W))
+    val write_pointer = RegInit(0.U(8.W))
+    val write_response = RegInit(0.U(2.W))
+
+    //
+    // Configures registers
+    // Valid read flags registers that are valid for read
+    // Valid write flags registers that are valid for write
+    // Input read flags registers that update values based on input ports
+    //
+
+    val valid_read = Wire(Vec(math.pow(2, ADDR_WIDTH_EFF).toInt, Bool()))
+    val valid_write = Wire(Vec(math.pow(2, ADDR_WIDTH_EFF).toInt, Bool()))
+    val input_read = Wire(Vec(math.pow(2, ADDR_WIDTH_EFF).toInt, Bool()))
+
+    for (r <- 0 until math.pow(2, ADDR_WIDTH_EFF).toInt) {
+        valid_read(r) := true.B
+        valid_write(r) := true.B
+        input_read(r) := false.B
+        when (input_read(r)) {
+            registers(r) := io.input(r)
+        }
+    }
+
+    valid_write(1) := false.B
+    input_read(1) := true.B
+
+    val w_bits_vec = Wire(Vec(DATA_WIDTH / 8, UInt(8.W)))
+    val w_bits = w_bits_vec.asUInt
+
+    for (b <- 0 until DATA_WIDTH / 8) {
+        w_bits_vec(b) := Mux(io.S_AXI.w.bits.strb(b), io.S_AXI.w.bits.data(b * 8 + 7, b * 8), registers(write_addr.addr + write_pointer)(b * 8 + 7, b * 8))
+    }
+
+    io.S_AXI.ar.ready := read_state === StateRead.sIdle
+    io.S_AXI.r.bits.id := read_addr.id
+    io.S_AXI.r.bits.data := registers(read_addr.addr + read_pointer)
+    io.S_AXI.r.bits.resp := Mux(valid_read(read_addr.addr + read_pointer), 0.U(2.W), 2.U(2.W))
+    io.S_AXI.r.bits.last := read_pointer === read_addr.len
+    io.S_AXI.r.valid := read_state === StateRead.sReadResp
+
+    io.S_AXI.aw.ready := write_state === StateWrite.sIdle
+    io.S_AXI.w.ready := write_state === StateWrite.sWriteData
+    io.S_AXI.b.bits.id := write_addr.id
+    io.S_AXI.b.bits.resp := write_response
+    io.S_AXI.b.valid := write_state === StateWrite.sWriteResp
+
+    io.output := registers
+
+    switch (read_state) {
+        is (StateRead.sIdle) {
+            when (io.S_AXI.ar.fire()) {
+                read_state := StateRead.sReadResp
+                read_addr := io.S_AXI.ar.bits
+                read_pointer := 0.U
+            }
+        }
+        is (StateRead.sReadResp) {
+            when (io.S_AXI.r.fire()) {
+                when (read_pointer === read_addr.len) {
+                    read_state := StateRead.sIdle
+                } .otherwise {
+                    read_pointer := read_pointer + 1.U
+                }
+            }
+        }
+    }
+    
+    switch (write_state) {
+        is (StateWrite.sIdle) {
+            when (io.S_AXI.aw.fire()) {
+                write_state := StateWrite.sWriteData
+                write_addr := io.S_AXI.aw.bits
+                write_pointer := 0.U
+                write_response := 0.U
+            }
+        }
+        is (StateWrite.sWriteData) {
+            when (io.S_AXI.w.fire()) {
+                when (valid_write(write_addr.addr + write_pointer)) {
+                    registers(write_addr.addr + write_pointer) := w_bits
+                } .otherwise {
+                    write_response := 2.U(2.W)
+                }
+                when (write_pointer === write_addr.len) {
+                    write_state := StateWrite.sWriteResp
+                } .otherwise {
+                    write_pointer := write_pointer + 1.U
                 }
             }
         }

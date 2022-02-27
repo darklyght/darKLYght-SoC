@@ -22,9 +22,10 @@ module syn (
     inout [15:0] io_ddr3_dq,
     inout [1:0] io_ddr3_dqs_n,
     inout [1:0] io_ddr3_dqs_p,
-    output o_init_calib_complete,
     output [1:0] o_ddr3_dm,
-    output o_ddr3_odt
+    output o_ddr3_odt,
+    output [7:0] o_led,
+    input [7:0] i_switch
 );
 
     wire reset;
@@ -403,7 +404,7 @@ module syn (
         .io_dram_aw_bits_lock(dram_axi_awlock),
         .io_dram_aw_bits_cache(dram_axi_awcache),
         .io_dram_aw_bits_prot(dram_axi_awprot),
-        .io_dram_aw_bits_qos(),
+        .io_dram_aw_bits_qos(dram_axi_awqos),
         .io_dram_w_ready(dram_axi_wready),
         .io_dram_w_valid(dram_axi_wvalid),
         .io_dram_w_bits_data(dram_axi_wdata),
@@ -423,13 +424,15 @@ module syn (
         .io_dram_ar_bits_lock(dram_axi_arlock),
         .io_dram_ar_bits_cache(dram_axi_arcache),
         .io_dram_ar_bits_prot(dram_axi_arprot),
-        .io_dram_ar_bits_qos(),
+        .io_dram_ar_bits_qos(dram_axi_arqos),
         .io_dram_r_ready(dram_axi_rready),
         .io_dram_r_valid(dram_axi_rvalid),
         .io_dram_r_bits_id(dram_axi_rid[0]),
         .io_dram_r_bits_data(dram_axi_rdata),
         .io_dram_r_bits_resp(dram_axi_rresp),
-        .io_dram_r_bits_last(dram_axi_rlast)
+        .io_dram_r_bits_last(dram_axi_rlast),
+        .io_led(o_led),
+        .io_switch(i_switch)
     );
 
 endmodule
