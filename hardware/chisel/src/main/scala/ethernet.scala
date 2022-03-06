@@ -74,23 +74,37 @@ class EthernetFrameMux(val N_INPUTS: Int) extends Module {
                                              USER_WIDTH = 1))
     })
 
-    val arbiter = Module(new LockingArbiter(N_INPUTS = N_INPUTS,
-                                     ROUND_ROBIN = false,
-                                     BLOCKING = true,
-                                     RELEASE = true))
-                                     
-    for (i <- 0 until N_INPUTS) {
-        arbiter.io.request(i) := io.input_headers(i).valid
-        arbiter.io.acknowledge(i) := io.inputs(i).bits.tlast.get
-        io.input_headers(i).ready := arbiter.io.chosen_oh(i) & io.output_header.ready
-        io.inputs(i).ready := arbiter.io.chosen_oh(i) & io.output.ready
+    val header_arbiter = Module(new RRArbiter(new EthernetFrameHeader, N_INPUTS))
+    val header_queue = Module(new Queue(new EthernetFrameHeader, 2))
+    val header_chosen = Module(new Queue(UInt(log2Ceil(N_INPUTS + 1).W), 8))
+
+    for ((a, i) <- header_arbiter.io.in zip io.input_headers) {
+        a <> i
     }
+    
+    header_queue.io.enq.bits <> header_arbiter.io.out.bits
+    header_queue.io.enq.valid := header_arbiter.io.out.valid
+    header_arbiter.io.out.ready := header_queue.io.enq.ready & header_chosen.io.enq.ready
+    header_chosen.io.enq.bits := header_arbiter.io.chosen
+    header_chosen.io.enq.valid := header_arbiter.io.out.valid
+    header_chosen.io.deq.ready := io.output.fire() && io.output.bits.tlast.get
+    io.output_header <> header_queue.io.deq
 
-    io.output_header.valid := io.input_headers(arbiter.io.chosen).valid
-    io.output_header.bits := io.input_headers(arbiter.io.chosen).bits
-
-    io.output.valid := io.inputs(arbiter.io.chosen).valid
-    io.output.bits := io.inputs(arbiter.io.chosen).bits
+    val output_queue = Module(new Queue(new AXIStream(DATA_WIDTH = 8,
+                                                      KEEP_EN = false,
+                                                      LAST_EN = true,
+                                                      ID_WIDTH = 0,
+                                                      DEST_WIDTH = 0,
+                                                      USER_WIDTH = 1), 2))
+                                     
+    for (m <- 0 until N_INPUTS) {
+        io.inputs(m).ready := false.B
+    }
+    
+    output_queue.io.enq.bits := io.inputs(header_chosen.io.deq.bits).bits
+    output_queue.io.enq.valid := io.inputs(header_chosen.io.deq.bits).valid & header_chosen.io.deq.valid
+    io.inputs(header_chosen.io.deq.bits).ready := output_queue.io.enq.ready & header_chosen.io.deq.valid
+    io.output <> output_queue.io.deq
 }
 
 class EthernetFrame extends Module {

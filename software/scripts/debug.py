@@ -76,21 +76,31 @@ def write(address, data, simulation=False):
     return rv
 
 if __name__ == "__main__":
-    start = time.time()
-    for i in range(0, 1):
-        random_data = ['%08x' % random.randrange(16**8) for n in range(1)]
-        write(args.test_addr if args.test_addr else "20000000", random_data, args.simulation)
-        data = read(args.test_addr if args.test_addr else "20000000", 1, args.simulation)
-        error = False
+    if args.simulation:
+        write("00001002", ["00000000"], True)
+        write("00001003", ["00000000"], True)
+        write("00001004", ["7F000001"], True)
+        write("00001005", ["00009C42"], True)
+    else:
+        write("00001002", ["00e04c80"])
+        write("00001003", ["baa90000"])
+        write("00001004", ["C0A80108"])
+        write("00001005", ["00009C42"])
+    # start = time.time()
+    # for i in range(0, 1):
+    #     random_data = ['%08x' % random.randrange(16**8) for n in range(1)]
+    #     # write(args.test_addr if args.test_addr else "20000000", random_data, args.simulation)
+    #     data = read(args.test_addr if args.test_addr else "20000000", 1, args.simulation)
+    #     error = False
 
-        for j in range(0, 1):
-            if binascii.hexlify(binascii.unhexlify(random_data[j])) != data[j]:
-                error = True
-                break
+    #     for j in range(0, 1):
+    #         if binascii.hexlify(binascii.unhexlify(random_data[j])) != data[j]:
+    #             error = True
+    #             break
         
-        if error:
-            print(i, "Error")
-            exit(1)
+    #     if error:
+    #         print(i, "Error")
+    #         exit(1)
 
-    end = time.time()
-    print(end - start)
+    # end = time.time()
+    # print(end - start)

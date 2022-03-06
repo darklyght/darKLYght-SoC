@@ -78,7 +78,7 @@ void* eth_create() {
     return (void*) eth;
 }
 
-void udp_create(void* eth, int port_number) {
+void udp_create(void* eth, int port_number, int source_port) {
     udp_master_t* port = (udp_master_t*)malloc(sizeof(*port));
     
     bzero(&(port->server_address), sizeof(port->server_address));
@@ -88,6 +88,10 @@ void udp_create(void* eth, int port_number) {
     (port->server_address).sin_family = AF_INET;
     (port->server_address).sin_addr.s_addr = inet_addr(IP_ADDRESS);
     (port->server_address).sin_port = htons((in_port_t)port_number);
+
+    (port->client_address).sin_family = AF_INET;
+    (port->client_address).sin_addr.s_addr = inet_addr("127.0.0.1");
+    (port->client_address).sin_port = htons((in_port_t)source_port);
     
     fcntl(port->fd, F_SETFL, fcntl(port->fd, F_GETFL, 0) | O_NONBLOCK);
     
@@ -109,19 +113,6 @@ int eth_tx_valid(void* eth) {
         recvfrom(((eth_master_t*)eth)->fd, ((eth_master_t*)eth)->tx_buffer, sizeof(((eth_master_t*)eth)->tx_buffer), 0, NULL, NULL);
         int size = recvfrom(((eth_master_t*)eth)->fd, ((eth_master_t*)eth)->tx_buffer, sizeof(((eth_master_t*)eth)->tx_buffer), 0, NULL, NULL);
         if (size > 0 && strcmp(get_destination_ip(((eth_master_t*)eth)->tx_buffer), IP_ADDRESS) == 0) {
-            int port = get_destination_port(((eth_master_t*)eth)->tx_buffer);
-            int port_index = -1;
-            for (int i = 0; i < ((eth_master_t*)eth)->n_ports && port_index == -1; i++) {
-                if (port == ((eth_master_t*)eth)->port_numbers[i]) {
-                    port_index = i;
-                }
-            }
-            if (port_index >= 0) {
-                udp_master_t* udp_port = ((eth_master_t*)eth)->ports[port_index];
-                (udp_port->client_address).sin_family = AF_INET;
-                (udp_port->client_address).sin_addr.s_addr = inet_addr("127.0.0.1");
-                (udp_port->client_address).sin_port = htons((in_port_t)get_source_port(((eth_master_t*)eth)->tx_buffer));
-            }
             ((eth_master_t*)eth)->tx_buffer[size] = '\0';
             process_packet(((eth_master_t*)eth)->tx_buffer, size);
             ((eth_master_t*)eth)->data_length = size;

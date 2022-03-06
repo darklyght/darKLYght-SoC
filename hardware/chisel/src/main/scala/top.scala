@@ -11,6 +11,7 @@ class top(val CLOCK_FREQUENCY: Int,
           val IP: String,
           val DEBUG_PORT: String,
           val MASTER_PORT: String,
+          val SLAVE_PORT: String,
           val GATEWAY: String,
           val SUBNET: String) extends Module {
     val io = IO(new Bundle {
@@ -46,23 +47,24 @@ class top(val CLOCK_FREQUENCY: Int,
     val network = Module(new Network(MAC = MAC, IP = IP, GATEWAY = GATEWAY, SUBNET = SUBNET))
     val debugger = Module(new UDPToAXI4Full(MAC = MAC, IP = IP, PORT = DEBUG_PORT, DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1))
     val remote_m = Module(new UDPToAXI4Full(MAC = MAC, IP = IP, PORT = MASTER_PORT, DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1))
-    val network_out = Module(new UDPFrameMux(N_INPUTS = 2))
+    val remote_s = Module(new AXI4FullToUDP(MAC = MAC, IP = IP, PORT = SLAVE_PORT, DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 1))
+    val network_out = Module(new UDPFrameMux(N_INPUTS = 3))
     val axi_xbar = Module(new AXICrossbar(DATA_WIDTH = 32,
                                           ADDR_WIDTH = 32,
                                           ID_WIDTH = 8,
                                           N_MASTERS = 2,
-                                          N_SLAVES = 2,
+                                          N_SLAVES = 3,
                                           SLAVE_ADDR = Seq(
-                                              Seq("h20000000".U, "h00001000".U),
-                                              Seq("h20000000".U, "h00001000".U)
+                                              Seq("h20000000".U, "h40000000".U, "h00001000".U),
+                                              Seq("h20000000".U, "h40000000".U, "h00001000".U)
                                           ), 
                                           SLAVE_MASK = Seq(
-                                              Seq("hE0000000".U, "hFFFFFFC0".U),
-                                              Seq("hE0000000".U, "hFFFFFFC0".U)
+                                              Seq("hE0000000".U, "hE0000000".U, "hFFFFFFC0".U),
+                                              Seq("hE0000000".U, "hE0000000".U, "hFFFFFFC0".U)
                                           ),
                                           ALLOWED = Seq(
-                                              Seq(true.B, true.B),
-                                              Seq(true.B, true.B)
+                                              Seq(true.B, true.B, true.B),
+                                              Seq(true.B, true.B, true.B)
                                           )))
     val REG_FILE_DATA_WIDTH = 32
     val REG_FILE_ADDR_WIDTH = 6
@@ -72,9 +74,10 @@ class top(val CLOCK_FREQUENCY: Int,
         register_file.io.input(r) := 0.U(REG_FILE_DATA_WIDTH.W)
     }
     register_file.io.input(1) := Cat(0.U(24.W), io.switch)
-
-
     io.led := register_file.io.output(0)(7, 0)
+    remote_s.io.network.mac := Cat(register_file.io.output(2), register_file.io.output(3)(31, 16))
+    remote_s.io.network.ip := register_file.io.output(4)
+    remote_s.io.network.port := register_file.io.output(5)(15, 0)
 
     val err_slave = Module(new ErrSlave(DATA_WIDTH = 32, ADDR_WIDTH = 32, ID_WIDTH = 8))
 
@@ -89,6 +92,8 @@ class top(val CLOCK_FREQUENCY: Int,
     network_out.io.input_headers(0) <> debugger.io.output_header
     network_out.io.inputs(1) <> remote_m.io.output
     network_out.io.input_headers(1) <> remote_m.io.output_header
+    network_out.io.inputs(2) <> remote_s.io.output
+    network_out.io.input_headers(2) <> remote_s.io.output_header
 
     network.io.tx_input <> network_out.io.output
     network.io.tx_header <> network_out.io.output_header
@@ -100,14 +105,17 @@ class top(val CLOCK_FREQUENCY: Int,
     axi_xbar.io.S_AXI(1).aw.bits.id := 1.U
     axi_xbar.io.S_AXI(1).ar.bits.id := 1.U
     axi_xbar.io.M_AXI(0) <> io.dram
-    axi_xbar.io.M_AXI(1) <> register_file.io.S_AXI
-    axi_xbar.io.M_AXI(2) <> err_slave.io.S_AXI
+    axi_xbar.io.M_AXI(1) <> remote_s.io.S_AXI
+    axi_xbar.io.M_AXI(2) <> register_file.io.S_AXI
+    axi_xbar.io.M_AXI(3) <> err_slave.io.S_AXI
     debugger.io.input <> network.io.rx_output
     debugger.io.input_header <> network.io.rx_header
     remote_m.io.input <> network.io.rx_output
     remote_m.io.input_header <> network.io.rx_header
-    network.io.rx_output.ready := debugger.io.input.ready && remote_m.io.input.ready
-    network.io.rx_header.ready := debugger.io.input_header.ready && remote_m.io.input_header.ready
+    remote_s.io.input <> network.io.rx_output
+    remote_s.io.input_header <> network.io.rx_header
+    network.io.rx_output.ready := debugger.io.input.ready && remote_m.io.input.ready && remote_s.io.input.ready
+    network.io.rx_header.ready := debugger.io.input_header.ready && remote_m.io.input_header.ready && remote_s.io.input.ready
 
     // Loopback
     // network.io.tx_input <> network.io.rx_output
@@ -147,6 +155,7 @@ object Instance extends App {
                                                                   IP = "hC0A80180",
                                                                   DEBUG_PORT = "h4D2",
                                                                   MASTER_PORT = "h4D3",
+                                                                  SLAVE_PORT = "h4D4",
                                                                   GATEWAY = "hC0A80101",
                                                                   SUBNET = "hFFFFFFFF"))))
     // (new chisel3.stage.ChiselStage).execute(
@@ -157,8 +166,9 @@ object Instance extends App {
     //                                                               UART_BAUD_RATE = 29491200,
     //                                                               MAC = "h000000000000",
     //                                                               IP = "h7F000080",
-    //                                                               DEBUG_PORT = "h1F40",
-    //                                                               MASTER_PORT = "h1F41",
+    //                                                               DEBUG_PORT = "h4D2",
+    //                                                               MASTER_PORT = "h4D3",
+    //                                                               SLAVE_PORT = "h4D4",
     //                                                               GATEWAY = "h7F000001",
     //                                                               SUBNET = "hFFFFFFFF"))))
 }
