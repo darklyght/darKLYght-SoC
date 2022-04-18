@@ -59,33 +59,78 @@ def read(address, length, simulation=False):
     packet = packet + address.zfill(8).upper() # 32-bit address
     packet = packet + '{:02x}'.format(length - 1) # length - 1 because 0 represents 1 word read
     packet = binascii.unhexlify(packet)
-    rv = raw_read(packet, length * 4, simulation)
-    data = [ binascii.hexlify(rv[i:i+4]) for i in range(0, length * 4, 4) ]
+    rv = raw_read(packet, length * 16, simulation)
+    data = [ binascii.hexlify(rv[i:i+16]) for i in range(0, length * 16, 16) ]
     return data
 
+def read_32bit(address, simulation=False):
+    if address[-1].upper() == "0":
+        return read(address, 1, simulation)[0][24:32]
+    elif address[-1].upper() == "4":
+        return read(address, 1, simulation)[0][16:24]
+    elif address[-1].upper() == "8":
+        return read(address, 1, simulation)[0][8:16]
+    elif address[-1].upper() == "C":
+        return read(address, 1, simulation)[0][0:8]
+
 def write(address, data, simulation=False):
+    return write_strobe(address, data, "F", simulation)
+
+def write_strobe(address, data, strb, simulation=False):
     assert(len(data) <= 256), "Data longer than 256 words."
     assert(int(address, 16) // 4096 == (int(address, 16) + len(data) - 1) // 4096), "Write burst crosses 4K boundary"
+    assert(len(strb) == 1), "Strobe length should be 1"
     packet = ''
-    packet = packet + "1".zfill(2) # R/W bit - 1 for write
+    packet = packet + strb
+    packet = packet + "1" # R/W bit - 1 for write
     packet = packet + address.zfill(8).upper() # 32-bit address
     packet = packet + '{:02x}'.format(len(data) - 1) # length - 1 because 0 represents 1 word write
-    packet = packet + ''.join([ word.zfill(8).upper() for word in data ])
+    packet = packet + ''.join([ word.zfill(32).upper() for word in data ])
     packet = binascii.unhexlify(packet)
     rv = raw_write(packet, simulation)
     return rv
 
-if __name__ == "__main__":
-    if args.simulation:
-        write("00001002", ["00000000"], True)
-        write("00001003", ["00000000"], True)
-        write("00001004", ["7F000001"], True)
-        write("00001005", ["00009C42"], True)
-    else:
-        write("00001002", ["00e04c80"])
-        write("00001003", ["baa90000"])
-        write("00001004", ["C0A80108"])
-        write("00001005", ["00009C42"])
+def write_32bit(address, data, simulation=False):
+    if address[-1].upper() == "0":
+        return write_strobe(address, [data + "0" * 0], "1", simulation)
+    elif address[-1].upper() == "4":
+        return write_strobe(address, [data + "0" * 8], "2", simulation)
+    elif address[-1].upper() == "8":
+        return write_strobe(address, [data + "0" * 16], "4", simulation)
+    elif address[-1].upper() == "C":
+        return write_strobe(address, [data + "0" * 24], "8", simulation)
+
+def write_music(filename, address):
+    with open(filename, 'r') as f:
+        contents = f.read().split('\n')
+        for i in range(0, len(contents), 64):
+            print('{:.2f}%'.format(float(i) / float(len(contents)) * 100), end='\r')
+            data = contents[i:i+64]
+            addr = '{:X}'.format(int(address, 16) + (i * 16))
+            write(addr, data)
+        print('\n')
+        return len(contents)
+
+def play_music(filename, address):
+    write_32bit("60000018", address)
+    write_32bit("60000014", "00000000")
+    length = write_music(filename, address)
+    write_32bit("60000014", '{:08x}'.format(int("80000000", 16) + length))
+
+def stop_music():
+    write_32bit("60000014", "00000000")
+
+# if __name__ == "__main__":
+    # if args.simulation:
+    #     write("00001008", ["00000000"], True)
+    #     write("0000100C", ["00000000"], True)
+    #     write("0000100F", ["7F000001"], True)
+    #     write("00001010", ["00009C42"], True)
+    # else:
+    #     write("00001008", ["00e04c80"])
+    #     write("0000100C", ["baa90000"])
+    #     write("0000100F", ["C0A80108"])
+    #     write("00001010", ["00009C42"])
     # start = time.time()
     # for i in range(0, 1):
     #     random_data = ['%08x' % random.randrange(16**8) for n in range(1)]

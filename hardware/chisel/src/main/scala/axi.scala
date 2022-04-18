@@ -232,7 +232,7 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
     })
     
     val aw_arbiter = Module(new RRArbiter(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), N_MASTERS))
-    val aw_queue = Module(new Queue(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), 2))
+    val aw_queue = Module(new Queue(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), 1))
     val aw_master = Module(new Queue(UInt(log2Ceil(N_MASTERS + 1).W), 8))
     
     for ((a, i) <- aw_arbiter.io.in zip io.S_AXI) {
@@ -246,7 +246,7 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
     aw_master.io.enq.valid := aw_arbiter.io.out.valid
     io.M_AXI.aw <> aw_queue.io.deq
     
-    val w_queue = Module(new Queue(new AXI4FullW(DATA_WIDTH), 2))
+    val w_queue = Module(new Queue(new AXI4FullW(DATA_WIDTH), 1))
     
     for (m <- 0 until N_MASTERS) {
         io.S_AXI(m).w.ready := false.B
@@ -257,7 +257,7 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
     io.S_AXI(aw_master.io.deq.bits).w.ready := w_queue.io.enq.ready & aw_master.io.deq.valid
     io.M_AXI.w <> w_queue.io.deq
     
-    val b_queue = Module(new Queue(new AXI4FullB(ID_WIDTH), 2))
+    val b_queue = Module(new Queue(new AXI4FullB(ID_WIDTH), 1))
     
     b_queue.io.enq <> io.M_AXI.b
     
@@ -271,7 +271,7 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
     aw_master.io.deq.ready := w_queue.io.deq.fire() && w_queue.io.deq.bits.last
     
     val ar_arbiter = Module(new RRArbiter(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), N_MASTERS))
-    val ar_queue = Module(new Queue(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), 2))
+    val ar_queue = Module(new Queue(new AXI4FullA(ADDR_WIDTH, ID_WIDTH), 1))
     val ar_master = Module(new Queue(UInt(log2Ceil(N_MASTERS + 1).W), 8))
     
     for ((a, i) <- ar_arbiter.io.in zip io.S_AXI) {
@@ -285,7 +285,7 @@ class AXICrossbarSlave(val DATA_WIDTH: Int,
     ar_master.io.enq.valid := ar_arbiter.io.out.valid
     io.M_AXI.ar <> ar_queue.io.deq
     
-    val r_queue = Module(new Queue(new AXI4FullR(DATA_WIDTH, ID_WIDTH), 2))
+    val r_queue = Module(new Queue(new AXI4FullR(DATA_WIDTH, ID_WIDTH), 1))
     
     for (m <- 0 until N_MASTERS) {
         io.S_AXI(m).r.bits := r_queue.io.deq.bits
@@ -407,6 +407,11 @@ class AXIRegisterFile(val DATA_WIDTH: Int,
     val write_pointer = RegInit(0.U(8.W))
     val write_response = RegInit(0.U(2.W))
 
+    val read_addr_word = Wire(UInt(ADDR_WIDTH.W))
+    val write_addr_word = Wire(UInt(ADDR_WIDTH.W))
+    read_addr_word := read_addr.addr >> log2Ceil(DATA_WIDTH / 8)
+    write_addr_word := write_addr.addr >> log2Ceil(DATA_WIDTH / 8)
+
     //
     // Configures registers
     // Valid read flags registers that are valid for read
@@ -427,20 +432,20 @@ class AXIRegisterFile(val DATA_WIDTH: Int,
         }
     }
 
-    valid_write(1) := false.B
-    input_read(1) := true.B
+    valid_write(0) := false.B
+    input_read(0) := true.B
 
     val w_bits_vec = Wire(Vec(DATA_WIDTH / 8, UInt(8.W)))
     val w_bits = w_bits_vec.asUInt
 
     for (b <- 0 until DATA_WIDTH / 8) {
-        w_bits_vec(b) := Mux(io.S_AXI.w.bits.strb(b), io.S_AXI.w.bits.data(b * 8 + 7, b * 8), registers(write_addr.addr + write_pointer)(b * 8 + 7, b * 8))
+        w_bits_vec(b) := Mux(io.S_AXI.w.bits.strb(b), io.S_AXI.w.bits.data(b * 8 + 7, b * 8), registers(write_addr_word + write_pointer)(b * 8 + 7, b * 8))
     }
 
     io.S_AXI.ar.ready := read_state === StateRead.sIdle
     io.S_AXI.r.bits.id := read_addr.id
-    io.S_AXI.r.bits.data := registers(read_addr.addr + read_pointer)
-    io.S_AXI.r.bits.resp := Mux(valid_read(read_addr.addr + read_pointer), 0.U(2.W), 2.U(2.W))
+    io.S_AXI.r.bits.data := registers(read_addr_word + read_pointer)
+    io.S_AXI.r.bits.resp := Mux(valid_read(read_addr_word + read_pointer), 0.U(2.W), 2.U(2.W))
     io.S_AXI.r.bits.last := read_pointer === read_addr.len
     io.S_AXI.r.valid := read_state === StateRead.sReadResp
 
@@ -482,8 +487,8 @@ class AXIRegisterFile(val DATA_WIDTH: Int,
         }
         is (StateWrite.sWriteData) {
             when (io.S_AXI.w.fire()) {
-                when (valid_write(write_addr.addr + write_pointer)) {
-                    registers(write_addr.addr + write_pointer) := w_bits
+                when (valid_write(write_addr_word + write_pointer)) {
+                    registers(write_addr_word + write_pointer) := w_bits
                 } .otherwise {
                     write_response := 2.U(2.W)
                 }
@@ -500,4 +505,162 @@ class AXIRegisterFile(val DATA_WIDTH: Int,
             }
         }
     }
+}
+
+class AXI4FullToAXIStream(val AXIS_DATA_WIDTH: Int,
+                          val AXIS_KEEP_EN: Boolean,
+                          val AXIS_LAST_EN: Boolean,
+                          val AXIS_ID_WIDTH: Int,
+                          val AXIS_DEST_WIDTH: Int,
+                          val AXIS_USER_WIDTH: Int,
+                          val AXI4_DATA_WIDTH: Int,
+                          val AXI4_ADDR_WIDTH: Int,
+                          val AXI4_ID_WIDTH: Int,
+                          val FIFO_DEPTH: Int,
+                          val THRESHOLD: Int) extends Module {
+    val io = IO(new Bundle {
+        val M_AXI = new AXI4Full(AXI4_DATA_WIDTH, AXI4_ADDR_WIDTH, AXI4_ID_WIDTH)
+        val output = Decoupled(new AXIStream(DATA_WIDTH = AXIS_DATA_WIDTH,
+                                             KEEP_EN = AXIS_KEEP_EN,
+                                             LAST_EN = AXIS_LAST_EN,
+                                             ID_WIDTH = AXIS_ID_WIDTH,
+                                             DEST_WIDTH = AXIS_DEST_WIDTH,
+                                             USER_WIDTH = AXIS_USER_WIDTH))
+        val address = Input(UInt(32.W))
+        val length = Input(UInt(30.W))
+        val start = Input(Bool())
+        val repeat = Input(Bool())
+        val done = Output(Bool())
+    })
+
+    val N_CYCLES = AXI4_DATA_WIDTH / AXIS_DATA_WIDTH
+    val N_BYTES = AXI4_DATA_WIDTH / 8
+    val WORD_ADDR_WIDTH = log2Ceil(N_BYTES)
+    val frame_pointer = RegInit(0.U(log2Ceil(N_CYCLES).W))
+    val done = RegInit(false.B)
+    val fifo = Module(new Queue(new AXIStream(DATA_WIDTH = AXIS_DATA_WIDTH,
+                                              KEEP_EN = AXIS_KEEP_EN,
+                                              LAST_EN = AXIS_LAST_EN,
+                                              ID_WIDTH = AXIS_ID_WIDTH,
+                                              DEST_WIDTH = AXIS_DEST_WIDTH,
+                                              USER_WIDTH = AXIS_USER_WIDTH), FIFO_DEPTH))
+
+    object State extends ChiselEnum {
+        val sIdle, sWait, sReadAddr, sReadData, sDone = Value
+    }
+
+    val state = RegInit(State.sIdle)
+
+    fifo.io.enq.bits.tdata := (io.M_AXI.r.bits.data << (frame_pointer * AXIS_DATA_WIDTH.U))(AXI4_DATA_WIDTH - 1, AXI4_DATA_WIDTH - AXIS_DATA_WIDTH)
+    fifo.io.enq.valid := io.M_AXI.r.valid
+
+    io.output <> fifo.io.deq
+    io.done := done
+
+    val current_address = RegInit(0.U((32 - WORD_ADDR_WIDTH).W))
+    val remaining = RegInit(0.U(30.W))
+    val length  = RegInit(0.U(30.W))
+
+    val next_address = Wire(UInt((32 - WORD_ADDR_WIDTH).W))
+    val next_length = Wire(UInt(30.W))
+
+    when (remaining > 256.U) {
+        when (((current_address + 256.U)((31 - WORD_ADDR_WIDTH), (12 - WORD_ADDR_WIDTH)) ^ current_address((31 - WORD_ADDR_WIDTH), (12 - WORD_ADDR_WIDTH))).orR === 1.U) {
+            next_length := Cat((current_address((31 - WORD_ADDR_WIDTH), (12 - WORD_ADDR_WIDTH)) + 1.U), 0.U((12 - WORD_ADDR_WIDTH).W)) - current_address
+        } .otherwise {
+            next_length := 256.U
+        }
+    } .otherwise {
+        when (((current_address + remaining)((31 - WORD_ADDR_WIDTH), (12 - WORD_ADDR_WIDTH)) ^ current_address((31 - WORD_ADDR_WIDTH), (12 - WORD_ADDR_WIDTH))).orR === 1.U) {
+            next_length := Cat((current_address((31 - WORD_ADDR_WIDTH), (12 - WORD_ADDR_WIDTH)) + 1.U), 0.U((12 - WORD_ADDR_WIDTH).W)) - current_address
+        } .otherwise {
+            next_length := remaining
+        }
+    }
+    next_address := current_address + next_length
+
+    switch (state) {
+        is (State.sIdle) {
+            when (io.start) {
+                state := State.sWait
+                current_address := io.address(31, WORD_ADDR_WIDTH)
+                remaining := io.length
+            }
+        }
+        is (State.sWait) {
+            when (~io.start) {
+                state := State.sIdle
+                done := false.B
+            } .elsewhen (fifo.io.count < THRESHOLD.U) {
+                state := State.sReadAddr
+                length := next_length
+            }
+        }
+        is (State.sReadAddr) {
+            when (io.M_AXI.ar.fire()) {
+                state := State.sReadData
+                current_address := next_address
+                remaining := remaining - next_length
+            }
+        }
+        is (State.sReadData) {
+            when (fifo.io.enq.fire()) {            
+                when (frame_pointer === (N_CYCLES - 1).U) {
+                    frame_pointer := 0.U
+                    when (io.M_AXI.r.bits.last) {
+                        when (remaining === 0.U) {
+                            state := State.sDone
+                            done := true.B
+                        } .otherwise {
+                            state := State.sWait
+                        }
+                    }
+                } .otherwise {
+                    frame_pointer := frame_pointer + 1.U
+                }
+            }
+        }
+        is (State.sDone) {
+            when (io.repeat) {
+                state := State.sIdle
+                done := false.B
+            } .otherwise {
+                when (~io.start) {
+                    state := State.sIdle
+                    done := false.B
+                }
+            }
+        }
+    }
+
+    io.M_AXI.ar.valid := state === State.sReadAddr
+    io.M_AXI.ar.bits.addr := Cat(current_address, 0.U(WORD_ADDR_WIDTH.W))
+    io.M_AXI.ar.bits.id := 0.U
+    io.M_AXI.ar.bits.len := length - 1.U
+    io.M_AXI.ar.bits.size := WORD_ADDR_WIDTH.U
+    io.M_AXI.ar.bits.burst := 1.U
+    io.M_AXI.ar.bits.lock := 0.U
+    io.M_AXI.ar.bits.cache := 2.U
+    io.M_AXI.ar.bits.prot := 0.U
+    io.M_AXI.ar.bits.qos := 0.U
+    
+    io.M_AXI.r.ready := state === State.sReadData && frame_pointer === (N_CYCLES - 1).U
+    
+    io.M_AXI.aw.valid := false.B
+    io.M_AXI.aw.bits.addr := 0.U
+    io.M_AXI.aw.bits.id := 0.U
+    io.M_AXI.aw.bits.len := 0.U
+    io.M_AXI.aw.bits.size := 0.U
+    io.M_AXI.aw.bits.burst := 0.U
+    io.M_AXI.aw.bits.lock := 0.U
+    io.M_AXI.aw.bits.cache := 0.U
+    io.M_AXI.aw.bits.prot := 0.U
+    io.M_AXI.aw.bits.qos := 0.U
+    
+    io.M_AXI.w.valid := false.B
+    io.M_AXI.w.bits.data := 0.U
+    io.M_AXI.w.bits.strb := 0.U
+    io.M_AXI.w.bits.last := 0.U
+    
+    io.M_AXI.b.ready := false.B
 }

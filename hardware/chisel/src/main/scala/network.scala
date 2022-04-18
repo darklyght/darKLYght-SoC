@@ -87,8 +87,8 @@ class AXI4FullToUDPTxAR(val MAC: String,
         val r_metadata = Decoupled(new AXI4FullToUDPMetadata(CHANNEL = "R", ID_WIDTH = ID_WIDTH))
     })
 
-    val addr_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 16))
-    val metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "R", ID_WIDTH = ID_WIDTH), 16))
+    val addr_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 4))
+    val metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "R", ID_WIDTH = ID_WIDTH), 4))
 
     object State extends ChiselEnum {
         val sHeader, sAddress = Value
@@ -187,9 +187,9 @@ class AXI4FullToUDPTxAWW(val MAC: String,
         val w_metadata = Decoupled(new AXI4FullToUDPMetadata(CHANNEL = "W", ID_WIDTH = ID_WIDTH))
     })
 
-    val addr_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 16))
+    val addr_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 4))
     val input_fifo = Module(new Queue(new AXI4FullW(DATA_WIDTH = DATA_WIDTH), 512))
-    val metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "W", ID_WIDTH = ID_WIDTH), 16))
+    val metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "W", ID_WIDTH = ID_WIDTH), 4))
 
     object State extends ChiselEnum {
         val sHeader, sAddress, sPayload = Value
@@ -372,12 +372,12 @@ class AXI4FullToUDPRx(val MAC: String,
     val counter = RegInit(0.U(11.W))
     val threshold_reached = RegInit(false.B)
 
-    val b_fifo = Module(new Queue(new AXI4FullB(ID_WIDTH = ID_WIDTH), 16))
+    val b_fifo = Module(new Queue(new AXI4FullB(ID_WIDTH = ID_WIDTH), 4))
     val r_fifo = Module(new Queue(new AXI4FullR(DATA_WIDTH = DATA_WIDTH, ID_WIDTH = ID_WIDTH), 512))
-    val w_metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "W", ID_WIDTH = ID_WIDTH), 8))
-    val r_metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "R", ID_WIDTH = ID_WIDTH), 8))
+    val w_metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "W", ID_WIDTH = ID_WIDTH), 4))
+    val r_metadata_fifo = Module(new Queue(new AXI4FullToUDPMetadata(CHANNEL = "R", ID_WIDTH = ID_WIDTH), 4))
 
-    val packet_complete = Module(new Queue(Bool(), 16))
+    val packet_complete = Module(new Queue(Bool(), 4))
 
     object State extends ChiselEnum {
         val sIdle, sHeader, sPayload, sEnd = Value
@@ -546,8 +546,8 @@ class UDPToAXI4FullTxB(val MAC: String,
         val w_metadata = Flipped(Decoupled(new UDPToAXI4FullMetadata(CHANNEL = "W")))
     })
 
-    val input_fifo = Module(new Queue(new AXI4FullB(ID_WIDTH = ID_WIDTH), 8))
-    val metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "W"), 8))
+    val input_fifo = Module(new Queue(new AXI4FullB(ID_WIDTH = ID_WIDTH), 4))
+    val metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "W"), 4))
 
     object State extends ChiselEnum {
         val sHeader, sPayload = Value
@@ -606,6 +606,7 @@ class UDPToAXI4FullTxR(val MAC: String,
                        val PORT: String,
                        val DATA_WIDTH: Int = 32,
                        val ID_WIDTH: Int = 1) extends Module {
+    val N_BYTES = DATA_WIDTH / 8
     val io = IO(new Bundle {
         val output = Decoupled(new AXIStream(DATA_WIDTH = 8,
                                              KEEP_EN = false,
@@ -619,9 +620,12 @@ class UDPToAXI4FullTxR(val MAC: String,
     })
 
     val input_fifo = Module(new Queue(new AXI4FullR(DATA_WIDTH = DATA_WIDTH, ID_WIDTH = ID_WIDTH), 512))
-    val metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "R"), 32))
-    val frame_pointer = RegInit(0.U(2.W))
+    val metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "R"), 4))
+    val frame_pointer = RegInit(0.U(log2Ceil(N_BYTES).W))
     val response = RegInit(0.U(8.W))
+    val tdata_bytes = Wire(Vec(N_BYTES, UInt(8.W)))
+
+    tdata_bytes := input_fifo.io.deq.bits.data.asTypeOf(Vec(N_BYTES, UInt(8.W)))
 
     object State extends ChiselEnum {
         val sHeader, sPayload, sResponse = Value
@@ -630,15 +634,7 @@ class UDPToAXI4FullTxR(val MAC: String,
 
     io.output.valid := (state === State.sPayload && input_fifo.io.deq.valid) || state === State.sResponse
     when (state === State.sPayload) {
-        when (frame_pointer === 0.U) {
-            io.output.bits.tdata := input_fifo.io.deq.bits.data(31, 24)
-        } .elsewhen (frame_pointer === 1.U) {
-            io.output.bits.tdata := input_fifo.io.deq.bits.data(23, 16)
-        } .elsewhen (frame_pointer === 2.U) {
-            io.output.bits.tdata := input_fifo.io.deq.bits.data(15, 8)
-        } .otherwise {
-            io.output.bits.tdata := input_fifo.io.deq.bits.data(7, 0)
-        }
+        io.output.bits.tdata := tdata_bytes(N_BYTES.U - 1.U - frame_pointer)
     } .otherwise {
         io.output.bits.tdata := response
     }
@@ -664,13 +660,13 @@ class UDPToAXI4FullTxR(val MAC: String,
     io.output_header.bits.ip.checksum := 0.U
     io.output_header.bits.dst_port := metadata_fifo.io.deq.bits.src_port
     io.output_header.bits.src_port := PORT.U(16.W)
-    io.output_header.bits.length := (metadata_fifo.io.deq.bits.length.get +& 1.U) * 4.U + 1.U + 8.U // Data + Response + Header
+    io.output_header.bits.length := (metadata_fifo.io.deq.bits.length.get +& 1.U) * N_BYTES.U + 1.U + 8.U // Data + Response + Header
     io.output_header.bits.checksum := 0.U
 
     io.r_metadata <> metadata_fifo.io.enq
 
     io.r <> input_fifo.io.enq
-    input_fifo.io.deq.ready := state === State.sPayload && frame_pointer === 3.U && io.output.fire()
+    input_fifo.io.deq.ready := state === State.sPayload && frame_pointer === (N_BYTES - 1).U && io.output.fire()
 
     metadata_fifo.io.deq.ready := io.output_header.ready && input_fifo.io.deq.valid
 
@@ -694,7 +690,7 @@ class UDPToAXI4FullTxR(val MAC: String,
         }
         is (State.sPayload) {
             when (io.output.fire()) {
-                when (input_fifo.io.deq.bits.last && frame_pointer === 3.U) {
+                when (input_fifo.io.deq.bits.last && frame_pointer === (N_BYTES - 1).U) {
                     state := State.sResponse
                     frame_pointer := 0.U
                 } .otherwise {
@@ -730,8 +726,8 @@ class UDPToAXI4FullTx(val MAC: String,
     })
 
     val udp_mux = Module(new UDPFrameMux(N_INPUTS = 2))
-    val b = Module(new UDPToAXI4FullTxB(MAC = MAC, IP = IP, PORT = PORT))
-    val r = Module(new UDPToAXI4FullTxR(MAC = MAC, IP = IP, PORT = PORT))
+    val b = Module(new UDPToAXI4FullTxB(MAC = MAC, IP = IP, PORT = PORT, ID_WIDTH = ID_WIDTH))
+    val r = Module(new UDPToAXI4FullTxR(MAC = MAC, IP = IP, PORT = PORT, DATA_WIDTH = DATA_WIDTH, ID_WIDTH = ID_WIDTH))
 
     b.io.b <> io.b
     b.io.w_metadata <> io.w_metadata
@@ -753,6 +749,7 @@ class UDPToAXI4FullRx(val MAC: String,
                       val DATA_WIDTH: Int = 32,
                       val ADDR_WIDTH: Int = 32,
                       val ID_WIDTH: Int = 1) extends Module {
+    val N_BYTES = DATA_WIDTH / 8
     val io = IO(new Bundle {
         val input = Flipped(Decoupled(new AXIStream(DATA_WIDTH = 8,
                                                     KEEP_EN = false,
@@ -771,19 +768,21 @@ class UDPToAXI4FullRx(val MAC: String,
     val write = RegInit(false.B)
     val header = Reg(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH))
     val udp_header = Reg(new UDPFrameHeader)
-    val data_word = Reg(UInt(24.W))
-    val frame_pointer = RegInit(0.U(3.W))
-    val counter = RegInit(0.U(10.W))
+    val data_word = Reg(Vec(N_BYTES - 1, UInt(8.W)))
+    val frame_pointer = RegInit(0.U((log2Ceil(N_BYTES) + 1).W))
+    val counter = RegInit(0.U(log2Ceil(N_BYTES * 256).W))
     val threshold_reached = RegInit(false.B)
 
-    val aw_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 16))
-    val ar_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 16))
+    val aw_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 4))
+    val ar_fifo = Module(new Queue(new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH), 4))
     val w_fifo = Module(new Queue(new AXI4FullW(DATA_WIDTH = DATA_WIDTH), 512))
 
-    val w_metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "W"), 16))
-    val r_metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "R"), 16))
+    val w_metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "W"), 4))
+    val r_metadata_fifo = Module(new Queue(new UDPToAXI4FullMetadata(CHANNEL = "R"), 4))
 
-    val packet_complete = Module(new Queue(Bool(), 16))
+    val packet_complete = Module(new Queue(Bool(), 4))
+
+    val word_strb = RegInit(0.U(4.W)) // To write 32-bit words
 
     object State extends ChiselEnum {
         val sIdle, sHeader, sPayload, sEnd = Value
@@ -807,7 +806,7 @@ class UDPToAXI4FullRx(val MAC: String,
     aw_fifo.io.enq.bits.id := 0.U
     aw_fifo.io.enq.bits.addr := header.addr
     aw_fifo.io.enq.bits.len := io.input.bits.tdata
-    aw_fifo.io.enq.bits.size := 2.U
+    aw_fifo.io.enq.bits.size := 4.U
     aw_fifo.io.enq.bits.burst := 1.U
     aw_fifo.io.enq.bits.lock := 0.U
     aw_fifo.io.enq.bits.cache := 0.U
@@ -818,19 +817,19 @@ class UDPToAXI4FullRx(val MAC: String,
     ar_fifo.io.enq.bits.id := 0.U
     ar_fifo.io.enq.bits.addr := header.addr
     ar_fifo.io.enq.bits.len := io.input.bits.tdata
-    ar_fifo.io.enq.bits.size := 2.U
+    ar_fifo.io.enq.bits.size := 4.U
     ar_fifo.io.enq.bits.burst := 1.U
     ar_fifo.io.enq.bits.lock := 0.U
     ar_fifo.io.enq.bits.cache := 0.U
     ar_fifo.io.enq.bits.prot := 0.U
     ar_fifo.io.enq.bits.qos := 0.U
 
-    w_fifo.io.enq.valid := write && state === State.sPayload && (frame_pointer === 3.U || io.input.bits.tlast.get) && io.input.fire()
-    w_fifo.io.enq.bits.data := Cat(data_word , io.input.bits.tdata)
-    w_fifo.io.enq.bits.strb := "hF".U
+    w_fifo.io.enq.valid := write && state === State.sPayload && (frame_pointer === (N_BYTES - 1).U || io.input.bits.tlast.get) && io.input.fire()
+    w_fifo.io.enq.bits.data := Cat(data_word.asUInt, io.input.bits.tdata)
+    w_fifo.io.enq.bits.strb := Cat(Mux(word_strb(3), "hF".U(4.W), 0.U(4.W)), Mux(word_strb(2), "hF".U(4.W), 0.U(4.W)), Mux(word_strb(1), "hF".U(4.W), 0.U(4.W)), Mux(word_strb(0), "hF".U(4.W), 0.U(4.W)))//~(0.U((DATA_WIDTH / 4).W))
     w_fifo.io.enq.bits.last := io.input.bits.tlast.get
 
-    packet_complete.io.enq.valid := write && state === State.sPayload && ~threshold_reached && (io.input.bits.tlast.get || counter === (header.len * 12.U - 1.U) / 4.U(12.W) + 1.U)
+    packet_complete.io.enq.valid := write && state === State.sPayload && ~threshold_reached && (io.input.bits.tlast.get || counter === (header.len * (N_BYTES * N_BYTES - N_BYTES).U - 1.U) / N_BYTES.U((log2Ceil(N_BYTES * 256) + 2).W) + 1.U)
     packet_complete.io.enq.bits := true.B
     packet_complete.io.deq.ready := w_fifo.io.deq.fire() && w_fifo.io.deq.bits.last
 
@@ -877,6 +876,7 @@ class UDPToAXI4FullRx(val MAC: String,
                 }
                 when (frame_pointer === 0.U) {
                     write := io.input.bits.tdata(0).asBool
+                    word_strb := io.input.bits.tdata(7, 4)
                 } .elsewhen (frame_pointer === 1.U) {
                     header.addr := Cat(io.input.bits.tdata, header.addr(23, 0))
                 } .elsewhen (frame_pointer === 2.U) {
@@ -895,18 +895,12 @@ class UDPToAXI4FullRx(val MAC: String,
                 when (io.input.bits.tlast.get) {
                     state := State.sIdle
                 }
-                when (frame_pointer === 3.U) {
+                when (frame_pointer === (N_BYTES - 1).U) {
                     frame_pointer := 0.U
                 } .otherwise {
                     frame_pointer := frame_pointer + 1.U
                 }
-                when (frame_pointer === 0.U) {
-                    data_word := Cat(io.input.bits.tdata, data_word(15, 0))
-                } .elsewhen (frame_pointer === 1.U) {
-                    data_word := Cat(data_word(23, 16), io.input.bits.tdata, data_word(7, 0))
-                } .elsewhen (frame_pointer === 2.U) {
-                    data_word := Cat(data_word(23, 8), io.input.bits.tdata)
-                }
+                data_word((N_BYTES - 2).U - frame_pointer) := io.input.bits.tdata
                 when (io.input.bits.tlast.get) {
                     counter := 0.U
                 } .otherwise {

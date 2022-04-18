@@ -494,7 +494,7 @@ class IPFrameTx extends Module {
                                                     LAST_EN = true,
                                                     ID_WIDTH = 0,
                                                     DEST_WIDTH = 0,
-                                                    USER_WIDTH = 1), 16))
+                                                    USER_WIDTH = 1), 8))
                                                     
     val frame_pointer = RegInit(0.U(16.W))
     val header_checksum = RegInit(0.U(16.W))
@@ -673,7 +673,7 @@ class IPFrameRx extends Module {
                                                      LAST_EN = true,
                                                      ID_WIDTH = 0,
                                                      DEST_WIDTH = 0,
-                                                     USER_WIDTH = 1), 16))
+                                                     USER_WIDTH = 1), 8))
 
     val header = Reg(new IPFrameHeader)
     val header_valid = RegInit(false.B)

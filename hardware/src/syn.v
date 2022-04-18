@@ -25,13 +25,23 @@ module syn (
     output [1:0] o_ddr3_dm,
     output o_ddr3_odt,
     output [7:0] o_led,
-    input [7:0] i_switch
+    input [7:0] i_switch,
+    output o_tmds_clock_p,
+    output o_tmds_clock_n,
+    output [2:0] o_tmds_p,
+    output [2:0] o_tmds_n
 );
 
     wire reset;
+    wire i_clock_int;
 
     assign reset = ~i_reset_n;
     assign o_ethernet_reset_n = i_reset_n;
+
+    BUFG i_clock_bufg (
+        .I(i_clock),
+        .O(i_clock_int)
+    );
 
     wire top_clock_int;
     wire top_clock_fb;
@@ -62,7 +72,7 @@ module syn (
         .CLKOUT1(dram_clock_int),
         .CLKOUT1B(),
         .CLKFBIN(top_clock_fb),
-        .CLKIN1(i_clock),
+        .CLKIN1(i_clock_int),
         .LOCKED(top_clock_locked),
         .PWRDWN(1'b0),
         .RST(reset)
@@ -100,7 +110,7 @@ module syn (
         .CLKOUT0(uart_clock_int),
         .CLKOUT0B(),
         .CLKFBIN(uart_clock_fb),
-        .CLKIN1(i_clock),
+        .CLKIN1(i_clock_int),
         .LOCKED(uart_clock_locked),
         .PWRDWN(1'b0),
         .RST(reset)
@@ -119,8 +129,6 @@ module syn (
     wire ethernet_clock;
     wire ethernet_clock90;
     wire ethernet_200clock;
-    wire ethernet_probe_int;
-    wire ethernet_probe;
 
     MMCME2_BASE #(
         .BANDWIDTH("OPTIMIZED"),
@@ -139,9 +147,6 @@ module syn (
         .CLKOUT2_DIVIDE(5),
         .CLKOUT2_PHASE(0.000),
         .CLKOUT2_DUTY_CYCLE(0.500),
-        .CLKOUT3_DIVIDE(4),
-        .CLKOUT3_PHASE(0.000),
-        .CLKOUT3_DUTY_CYCLE(0.500),
         .REF_JITTER1(0.010)
     ) ethernet_clock_mmcm (
         .CLKFBOUT(ethernet_clock_fb),
@@ -152,10 +157,8 @@ module syn (
         .CLKOUT1B(),
         .CLKOUT2(ethernet_200clock_int),
         .CLKOUT2B(),
-        .CLKOUT3(ethernet_probe_int),
-        .CLKOUT3B(),
         .CLKFBIN(ethernet_clock_fb),
-        .CLKIN1(i_clock),
+        .CLKIN1(i_clock_int),
         .LOCKED(ethernet_clock_locked),
         .PWRDWN(1'b0),
         .RST(reset)
@@ -285,8 +288,8 @@ module syn (
     wire [3:0] dram_axi_awqos;
     wire dram_axi_awvalid;
     wire dram_axi_awready;
-    wire [31:0] dram_axi_wdata;
-    wire [3:0] dram_axi_wstrb;
+    wire [127:0] dram_axi_wdata;
+    wire [15:0] dram_axi_wstrb;
     wire dram_axi_wlast;
     wire dram_axi_wvalid;
     wire dram_axi_wready;
@@ -306,7 +309,7 @@ module syn (
     wire dram_axi_arvalid;
     wire dram_axi_arready;
     wire [7:0] dram_axi_rid;
-    wire [31:0] dram_axi_rdata;
+    wire [127:0] dram_axi_rdata;
     wire [1:0] dram_axi_rresp;
     wire dram_axi_rlast;
     wire dram_axi_rvalid;
@@ -380,9 +383,432 @@ module syn (
         .sys_rst(reset || ~top_clock_locked)
     );
 
+    wire hdmi_pixel_clock_int;
+    wire hdmi_output_clock_int;
+    wire hdmi_audio_clock_int;
+    wire hdmi_video_clock_fb;
+    wire hdmi_video_clock_locked;
+    wire hdmi_audio_clock_fb;
+    wire hdmi_audio_clock_locked;
+    wire hdmi_pixel_clock;
+    wire hdmi_output_clock;
+    reg [6:0] hdmi_audio_clock_fast = 7'b0;
+    wire hdmi_audio_clock;
+
+    MMCME2_BASE #(
+        .BANDWIDTH("OPTIMIZED"),
+        .CLKOUT4_CASCADE("FALSE"),
+        .STARTUP_WAIT("FALSE"),
+        .CLKIN1_PERIOD(10.000),
+        .DIVCLK_DIVIDE(5),
+        .CLKFBOUT_MULT_F(37.125),
+        .CLKFBOUT_PHASE(0.000),
+        .CLKOUT0_DIVIDE_F(5.000),
+        .CLKOUT0_PHASE(0.000),
+        .CLKOUT0_DUTY_CYCLE(0.500),
+        .CLKOUT1_DIVIDE(1),
+        .CLKOUT1_PHASE(0.000),
+        .CLKOUT1_DUTY_CYCLE(0.500)
+    ) hdmi_video_mmcm (
+        .CLKFBOUT(hdmi_video_clock_fb),
+        .CLKFBOUTB(),
+        .CLKOUT0(hdmi_pixel_clock_int),
+        .CLKOUT0B(),
+        .CLKOUT1(hdmi_output_clock_int),
+        .CLKOUT1B(),
+        .CLKFBIN(hdmi_video_clock_fb),
+        .CLKIN1(i_clock_int),
+        .LOCKED(hdmi_video_clock_locked),
+        .PWRDWN(1'b0),
+        .RST(reset)
+    );
+
+    BUFG hdmi_pixel_clock_bufg (
+        .I(hdmi_pixel_clock_int),
+        .O(hdmi_pixel_clock)
+    );
+
+    BUFG hdmi_output_clock_bufg (
+        .I(hdmi_output_clock_int),
+        .O(hdmi_output_clock)
+    );
+
+    MMCME2_BASE #(
+        .BANDWIDTH("OPTIMIZED"),
+        .CLKOUT4_CASCADE("FALSE"),
+        .STARTUP_WAIT("FALSE"),
+        .CLKIN1_PERIOD(10.000),
+        .DIVCLK_DIVIDE(6),
+        .CLKFBOUT_MULT_F(44.375),
+        .CLKFBOUT_PHASE(0.000),
+        .CLKOUT0_DIVIDE_F(120.375),
+        .CLKOUT0_PHASE(0.000),
+        .CLKOUT0_DUTY_CYCLE(0.500)
+    ) hdmi_audio_mmcm (
+        .CLKFBOUT(hdmi_audio_clock_fb),
+        .CLKFBOUTB(),
+        .CLKOUT0(hdmi_audio_clock_int),
+        .CLKOUT0B(),
+        .CLKFBIN(hdmi_audio_clock_fb),
+        .CLKIN1(i_clock_int),
+        .LOCKED(hdmi_audio_clock_locked),
+        .PWRDWN(1'b0),
+        .RST(reset)
+    );
+
+    always @ (posedge hdmi_audio_clock_int) begin
+        hdmi_audio_clock_fast <= hdmi_audio_clock_fast + 7'b1;
+    end
+
+    BUFG hdmi_audio_clock_bufg (
+        .I(hdmi_audio_clock_fast[6]),
+        .O(hdmi_audio_clock)
+    );
+
+    wire [9:0] hdmi_tmds_clock;
+    wire [1:0] hdmi_tmds_clock_cascade;
+    wire hdmi_tmds_clock_single;
+    wire [9:0] hdmi_tmds_0;
+    wire [1:0] hdmi_tmds_0_cascade;
+    wire hdmi_tmds_0_single;
+    wire [9:0] hdmi_tmds_1;
+    wire [1:0] hdmi_tmds_1_cascade;
+    wire hdmi_tmds_1_single;
+    wire [9:0] hdmi_tmds_2;
+    wire [1:0] hdmi_tmds_2_cascade;
+    wire hdmi_tmds_2_single;
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("MASTER"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_clock_master (
+        .OQ(hdmi_tmds_clock_single),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(hdmi_tmds_clock[0]),
+        .D2(hdmi_tmds_clock[1]),
+        .D3(hdmi_tmds_clock[2]),
+        .D4(hdmi_tmds_clock[3]),
+        .D5(hdmi_tmds_clock[4]),
+        .D6(hdmi_tmds_clock[5]),
+        .D7(hdmi_tmds_clock[6]),
+        .D8(hdmi_tmds_clock[7]),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(hdmi_tmds_clock_cascade[0]),
+        .SHIFTIN2(hdmi_tmds_clock_cascade[1]),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("SLAVE"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_clock_slave (
+        .SHIFTOUT1(hdmi_tmds_clock_cascade[0]),
+        .SHIFTOUT2(hdmi_tmds_clock_cascade[1]),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(1'b0),
+        .D2(1'b0),
+        .D3(hdmi_tmds_clock[8]),
+        .D4(hdmi_tmds_clock[9]),
+        .D5(1'b0),
+        .D6(1'b0),
+        .D7(1'b0),
+        .D8(1'b0),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(1'b0),
+        .SHIFTIN2(1'b0),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("MASTER"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_0_master (
+        .OQ(hdmi_tmds_0_single),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(hdmi_tmds_0[0]),
+        .D2(hdmi_tmds_0[1]),
+        .D3(hdmi_tmds_0[2]),
+        .D4(hdmi_tmds_0[3]),
+        .D5(hdmi_tmds_0[4]),
+        .D6(hdmi_tmds_0[5]),
+        .D7(hdmi_tmds_0[6]),
+        .D8(hdmi_tmds_0[7]),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(hdmi_tmds_0_cascade[0]),
+        .SHIFTIN2(hdmi_tmds_0_cascade[1]),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("SLAVE"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_0_slave (
+        .SHIFTOUT1(hdmi_tmds_0_cascade[0]),
+        .SHIFTOUT2(hdmi_tmds_0_cascade[1]),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(1'b0),
+        .D2(1'b0),
+        .D3(hdmi_tmds_0[8]),
+        .D4(hdmi_tmds_0[9]),
+        .D5(1'b0),
+        .D6(1'b0),
+        .D7(1'b0),
+        .D8(1'b0),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(1'b0),
+        .SHIFTIN2(1'b0),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("MASTER"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_1_master (
+        .OQ(hdmi_tmds_1_single),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(hdmi_tmds_1[0]),
+        .D2(hdmi_tmds_1[1]),
+        .D3(hdmi_tmds_1[2]),
+        .D4(hdmi_tmds_1[3]),
+        .D5(hdmi_tmds_1[4]),
+        .D6(hdmi_tmds_1[5]),
+        .D7(hdmi_tmds_1[6]),
+        .D8(hdmi_tmds_1[7]),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(hdmi_tmds_1_cascade[0]),
+        .SHIFTIN2(hdmi_tmds_1_cascade[1]),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("SLAVE"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_1_slave (
+        .SHIFTOUT1(hdmi_tmds_1_cascade[0]),
+        .SHIFTOUT2(hdmi_tmds_1_cascade[1]),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(1'b0),
+        .D2(1'b0),
+        .D3(hdmi_tmds_1[8]),
+        .D4(hdmi_tmds_1[9]),
+        .D5(1'b0),
+        .D6(1'b0),
+        .D7(1'b0),
+        .D8(1'b0),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(1'b0),
+        .SHIFTIN2(1'b0),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("MASTER"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_2_master (
+        .OQ(hdmi_tmds_2_single),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(hdmi_tmds_2[0]),
+        .D2(hdmi_tmds_2[1]),
+        .D3(hdmi_tmds_2[2]),
+        .D4(hdmi_tmds_2[3]),
+        .D5(hdmi_tmds_2[4]),
+        .D6(hdmi_tmds_2[5]),
+        .D7(hdmi_tmds_2[6]),
+        .D8(hdmi_tmds_2[7]),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(hdmi_tmds_2_cascade[0]),
+        .SHIFTIN2(hdmi_tmds_2_cascade[1]),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OSERDESE2 #(
+        .DATA_RATE_OQ("DDR"),
+        .DATA_RATE_TQ("SDR"),
+        .DATA_WIDTH(10),
+        .INIT_OQ(1'b0),
+        .INIT_TQ(1'b0),
+        .SERDES_MODE("SLAVE"),
+        .SRVAL_OQ(1'b0),
+        .SRVAL_TQ(1'b0),
+        .TBYTE_CTL("FALSE"),
+        .TBYTE_SRC("FALSE"),
+        .TRISTATE_WIDTH(1)
+    ) tmds_2_slave (
+        .SHIFTOUT1(hdmi_tmds_2_cascade[0]),
+        .SHIFTOUT2(hdmi_tmds_2_cascade[1]),
+        .CLK(hdmi_output_clock),
+        .CLKDIV(hdmi_pixel_clock),
+        .D1(1'b0),
+        .D2(1'b0),
+        .D3(hdmi_tmds_2[8]),
+        .D4(hdmi_tmds_2[9]),
+        .D5(1'b0),
+        .D6(1'b0),
+        .D7(1'b0),
+        .D8(1'b0),
+        .OCE(1'b1),
+        .RST(reset),
+        .SHIFTIN1(1'b0),
+        .SHIFTIN2(1'b0),
+        .T1(1'b0),
+        .T2(1'b0),
+        .T3(1'b0),
+        .T4(1'b0),
+        .TBYTEIN(1'b0),
+        .TCE(1'b0)
+    );
+
+    OBUFDS #(
+        .IOSTANDARD("TMDS_33"),
+        .SLEW("SLOW")
+    ) tmds_clock_obufds (
+        .I(hdmi_tmds_clock_single),
+        .O(o_tmds_clock_p),
+        .OB(o_tmds_clock_n)
+    );
+
+    OBUFDS #(
+        .IOSTANDARD("TMDS_33"),
+        .SLEW("SLOW")
+    ) tmds_0_obufds (
+        .I(hdmi_tmds_0_single),
+        .O(o_tmds_p[0]),
+        .OB(o_tmds_n[0])
+    );
+
+    OBUFDS #(
+        .IOSTANDARD("TMDS_33"),
+        .SLEW("SLOW")
+    ) tmds_1_obufds (
+        .I(hdmi_tmds_1_single),
+        .O(o_tmds_p[1]),
+        .OB(o_tmds_n[1])
+    );
+
+    OBUFDS #(
+        .IOSTANDARD("TMDS_33"),
+        .SLEW("SLOW")
+    ) tmds_2_obufds (
+        .I(hdmi_tmds_2_single),
+        .O(o_tmds_p[2]),
+        .OB(o_tmds_n[2])
+    );
+
     top top (
         .clock(top_clock),
-        .reset(reset || ~top_clock_locked || ~uart_clock_locked || ~ethernet_clock_locked),
+        .reset(reset || ~top_clock_locked || ~uart_clock_locked || ~ethernet_clock_locked || ~hdmi_video_clock_locked || ~hdmi_audio_clock_locked),
         .io_uart_clock(uart_clock),
         .io_uart_rx(i_uart_rx),
         .io_uart_tx(o_uart_tx),
@@ -432,7 +858,13 @@ module syn (
         .io_dram_r_bits_resp(dram_axi_rresp),
         .io_dram_r_bits_last(dram_axi_rlast),
         .io_led(o_led),
-        .io_switch(i_switch)
+        .io_switch(i_switch),
+        .io_hdmi_pixel_clock(hdmi_pixel_clock),
+        .io_hdmi_audio_clock(hdmi_audio_clock),
+        .io_hdmi_tmds_clock(hdmi_tmds_clock),
+        .io_hdmi_tmds_0(hdmi_tmds_0),
+        .io_hdmi_tmds_1(hdmi_tmds_1),
+        .io_hdmi_tmds_2(hdmi_tmds_2)
     );
 
 endmodule

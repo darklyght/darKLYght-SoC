@@ -3,7 +3,7 @@
 module axi_ram #
 (
     // Width of data bus in bits
-    parameter DATA_WIDTH = 32,
+    parameter DATA_WIDTH = 128,
     // Width of address bus in bits
     parameter ADDR_WIDTH = 29,
     // Width of wstrb (width of data bus in words)
@@ -347,6 +347,8 @@ module tb (
     input i_uart_clock,
     input i_ethernet_clock,
     input i_ethernet_clock_90,
+    input i_hdmi_pixel_clock,
+    input i_hdmi_audio_clock,
     input i_reset
 );
     
@@ -391,8 +393,8 @@ module tb (
     wire [2:0] dram_axi_awprot;
     wire dram_axi_awvalid;
     wire dram_axi_awready;
-    wire [31:0] dram_axi_wdata;
-    wire [3:0] dram_axi_wstrb;
+    wire [127:0] dram_axi_wdata;
+    wire [15:0] dram_axi_wstrb;
     wire dram_axi_wlast;
     wire dram_axi_wvalid;
     wire dram_axi_wready;
@@ -411,7 +413,7 @@ module tb (
     wire dram_axi_arvalid;
     wire dram_axi_arready;
     wire [7:0] dram_axi_rid;
-    wire [31:0] dram_axi_rdata;
+    wire [127:0] dram_axi_rdata;
     wire [1:0] dram_axi_rresp;
     wire dram_axi_rlast;
     wire dram_axi_rvalid;
@@ -507,7 +509,9 @@ module tb (
         .io_dram_r_bits_id(dram_axi_rid),
         .io_dram_r_bits_data(dram_axi_rdata),
         .io_dram_r_bits_resp(dram_axi_rresp),
-        .io_dram_r_bits_last(dram_axi_rlast)
+        .io_dram_r_bits_last(dram_axi_rlast),
+        .io_hdmi_pixel_clock(i_hdmi_pixel_clock),
+        .io_hdmi_audio_clock(i_hdmi_audio_clock)
     );
 
 endmodule

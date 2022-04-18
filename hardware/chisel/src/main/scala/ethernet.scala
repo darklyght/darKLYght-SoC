@@ -175,7 +175,7 @@ class EthernetFrameTx extends Module {
                                                     LAST_EN = true,
                                                     ID_WIDTH = 0,
                                                     DEST_WIDTH = 0,
-                                                    USER_WIDTH = 1), 16))
+                                                    USER_WIDTH = 1), 8))
     val frame_pointer = RegInit(0.U(4.W))
     val busy = RegInit(false.B)
 
@@ -290,7 +290,7 @@ class EthernetFrameRx extends Module {
                                                      LAST_EN = true,
                                                      ID_WIDTH = 0,
                                                      DEST_WIDTH = 0,
-                                                     USER_WIDTH = 1), 16))
+                                                     USER_WIDTH = 1), 8))
     val header = Reg(new EthernetFrameHeader())
     val header_valid = RegInit(false.B)
     val frame_pointer = RegInit(0.U(4.W))

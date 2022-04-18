@@ -32,16 +32,22 @@ int main(int argc, char** argv, char** env) {
     const std::shared_ptr<Clock> uart_clock(new Clock(4238));
     const std::shared_ptr<Clock> ethernet_clock(new Clock(4000));
     const std::shared_ptr<Clock> ethernet_clock_90(new Clock(4000, 270));
+    const std::shared_ptr<Clock> hdmi_pixel_clock(new Clock(3367));
+    const std::shared_ptr<Clock> hdmi_audio_clock(new Clock(104167));
     clocks.add_clock("top_clock", top_clock);
     clocks.add_clock("uart_clock", uart_clock);
     clocks.add_clock("ethernet_clock", ethernet_clock);
     clocks.add_clock("ethernet_clock_90", ethernet_clock_90);
+    clocks.add_clock("hdmi_pixel_clock", hdmi_pixel_clock);
+    clocks.add_clock("hdmi_audio_clock", hdmi_audio_clock);
 
     tb->i_reset = 1;
     tb->i_clock = top_clock->get_state();
     tb->i_uart_clock = uart_clock->get_state();
     tb->i_ethernet_clock = ethernet_clock->get_state();
     tb->i_ethernet_clock_90 = ethernet_clock_90->get_state();
+    tb->i_hdmi_pixel_clock = hdmi_pixel_clock->get_state();
+    tb->i_hdmi_audio_clock = hdmi_audio_clock->get_state();
     tb->eval();
     tfp->dump(contextp->time());
     tfp->flush();
@@ -55,6 +61,8 @@ int main(int argc, char** argv, char** env) {
         tb->i_uart_clock = uart_clock->get_state();
         tb->i_ethernet_clock = ethernet_clock->get_state();
         tb->i_ethernet_clock_90 = ethernet_clock_90->get_state();
+        tb->i_hdmi_pixel_clock = hdmi_pixel_clock->get_state();
+        tb->i_hdmi_audio_clock = hdmi_audio_clock->get_state();
         tb->eval();
         tfp->dump(contextp->time());
         tfp->flush();
