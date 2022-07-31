@@ -5,23 +5,23 @@ import random
 import time
 import argparse
 
-parser = argparse.ArgumentParser(description='Settings for sending and receiving packets.')
-parser.add_argument('src_ip', help='Source IP (IP to send packets from)')
-parser.add_argument('src_port', help='Source port (Port to send packets from)')
-parser.add_argument('dst_ip', help='Destination IP (IP to send packets to)')
-parser.add_argument('dst_port', help='Destination port (Port to send packets to)')
-parser.add_argument('--test_addr', help='Starting address for test')
-parser.add_argument('--simulation', help='Simulator-friendly packet sending', action='store_true')
-args = parser.parse_args()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Settings for sending and receiving packets.')
+    parser.add_argument('src_ip', help='Source IP (IP to send packets from)')
+    parser.add_argument('src_port', help='Source port (Port to send packets from)')
+    parser.add_argument('dst_ip', help='Destination IP (IP to send packets to)')
+    parser.add_argument('dst_port', help='Destination port (Port to send packets to)')
+    parser.add_argument('--simulation', help='Simulator-friendly packet sending', action='store_true')
+    args = parser.parse_args()
 
-SOURCE_IP = args.src_ip
-SOURCE_PORT = int(args.src_port)
-TARGET_IP = args.dst_ip
-TARGET_PORT = int(args.dst_port)
+    SOURCE_IP = args.src_ip
+    SOURCE_PORT = int(args.src_port)
+    TARGET_IP = args.dst_ip
+    TARGET_PORT = int(args.dst_port)
 
-udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udp_sock.bind((SOURCE_IP, SOURCE_PORT))
-udp_sock.settimeout(5)
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.bind((SOURCE_IP, SOURCE_PORT))
+    udp_sock.settimeout(5)
 
 def raw_read(packet, length, simulation=False):
     udp_sock.sendto(packet, (TARGET_IP, TARGET_PORT))
@@ -119,33 +119,3 @@ def play_music(filename, address):
 
 def stop_music():
     write_32bit("60000014", "00000000")
-
-# if __name__ == "__main__":
-    # if args.simulation:
-    #     write("00001008", ["00000000"], True)
-    #     write("0000100C", ["00000000"], True)
-    #     write("0000100F", ["7F000001"], True)
-    #     write("00001010", ["00009C42"], True)
-    # else:
-    #     write("00001008", ["00e04c80"])
-    #     write("0000100C", ["baa90000"])
-    #     write("0000100F", ["C0A80108"])
-    #     write("00001010", ["00009C42"])
-    # start = time.time()
-    # for i in range(0, 1):
-    #     random_data = ['%08x' % random.randrange(16**8) for n in range(1)]
-    #     # write(args.test_addr if args.test_addr else "20000000", random_data, args.simulation)
-    #     data = read(args.test_addr if args.test_addr else "20000000", 1, args.simulation)
-    #     error = False
-
-    #     for j in range(0, 1):
-    #         if binascii.hexlify(binascii.unhexlify(random_data[j])) != data[j]:
-    #             error = True
-    #             break
-        
-    #     if error:
-    #         print(i, "Error")
-    #         exit(1)
-
-    # end = time.time()
-    # print(end - start)

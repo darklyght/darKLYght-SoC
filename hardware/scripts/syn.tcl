@@ -14,10 +14,6 @@ add_files $hardware_root/src/ip/MemoryController/MemoryController.xci
 generate_target all [ get_files *MemoryController.xci ]
 synth_ip [ get_files *MemoryController.xci ]
 
-add_files $hardware_root/src/ip/AudioILA/AudioILA.xci
-generate_target all [ get_files *AudioILA.xci ]
-synth_ip [ get_files *AudioILA.xci ]
-
 synth_design -top syn -part xc7a200tsbg484-1 -directive PerformanceOptimized
 write_checkpoint -force $output_dir/post_synth.dcp
 report_timing_summary -file $output_dir/post_synth_timing_summary.rpt

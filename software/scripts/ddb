@@ -1,0 +1,231 @@
+#! /usr/bin/python3
+
+import argparse
+import binascii
+import cmd
+import socket
+import time
+
+class UDPError(Exception):
+    pass
+
+class UDPSendError(UDPError):
+    def __init__(self, message: str = "UDP Send Error detected") -> None:
+        super(UDPSendError, self).__init__(message)
+
+class UDPReceiveError(UDPError):
+    def __init__(self, message: str = "UDP Receive Error detected") -> None:
+        super(UDPReceiveError, self).__init__(message)
+
+class AXIError(Exception):
+    pass
+
+class AXIProtocolError(AXIError):
+    def __init__(self, message: str = "AXI Protocol Error detected") -> None:
+        super(AXIProtocolError, self).__init__(message)
+
+class AXISlaveError(AXIError):
+    def __init__(self, message: str = "AXI Slave Error detected") -> None:
+        super(AXISlaveError, self).__init__(message)
+
+class AXIDecodeError(AXIError):
+    def __init__(self, message: str = "AXI Decode Error detected") -> None:
+        super(AXIDecodeError, self).__init__(message)
+
+class AXIOverUDPProtocolError(AXIError):
+    def __init__(self, message: str = "AXI Over UDP Protocol Error detected") -> None:
+        super(AXIOverUDPProtocolError, self).__init__(message)
+
+class UDPParameters():       
+    def __init__(self, ip: str, port: int) -> None:
+        if type(ip) != str or type(port) != int:
+            raise TypeError
+        self.ip: str = ip
+        self.port: int = port
+
+class DUT():
+    def __init__(self, source: UDPParameters, destination: UDPParameters) -> None:
+        self.source: UDPParameters = source
+        self.destination: UDPParameters = destination
+        self.udp_sock: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.udp_sock.bind((source.ip, source.port))
+        self.udp_sock.settimeout(5)
+
+    def raw_read(self, packet: bytes, length: int, simulation: bool = False) -> bytes:
+        try:
+            self.udp_sock.sendto(packet, (self.destination.ip, self.destination.port))
+        except:
+            raise UDPSendError
+        if simulation:
+            time.sleep(1)
+        data: bytes
+        try:
+            (data, _) = self.udp_sock.recvfrom(length + 1)
+        except:
+            raise UDPReceiveError
+        if simulation:
+            time.sleep(1)
+        if data[-1] << 2 >> 6 == 2:
+            raise AXISlaveError("Crossing 4K boundary on read burst or reading invalid register")
+        elif data[-1] >> 6 == 3:
+            raise AXIDecodeError
+        if len(data) != length + 1:
+            raise AXIOverUDPProtocolError
+        return data
+
+    def read(self, address: str, length: int, simulation: bool = False) -> list[bytes]:
+        if address[0:2] == "0x":
+            address = address[2:]
+        if (length > 256):
+            raise AXIProtocolError("Trying to read more than 256 words")
+        if (int(address, 16) // 4096 != (int(address, 16) + length - 1) // 4096):
+            raise AXIProtocolError("Read burst crosses 4K boundary")
+        packet: str = ""
+        packet = packet + "0".zfill(2) # R/W bit - 0 for read
+        packet = packet + address.zfill(8).upper() # 32-bit address
+        packet = packet + '{:02x}'.format(length - 1) # length - 1 because 0 represents 1 word read
+        packet_bytes: bytes = binascii.unhexlify(packet)
+        rv: bytes = self.raw_read(packet_bytes, length * 16, simulation)
+        data: list[bytes] = [binascii.hexlify(rv[i:i+16]) for i in range(0, length * 16, 16)]
+        return data
+
+    def read_32bit(self, address: str, simulation: bool = False) -> bytes:
+        if address[0:2] == "0x":
+            address = address[2:]
+        if address[-1].upper() == "0":
+            return self.read(address, 1, simulation)[0][24:32]
+        elif address[-1].upper() == "4":
+            return self.read(address, 1, simulation)[0][16:24]
+        elif address[-1].upper() == "8":
+            return self.read(address, 1, simulation)[0][8:16]
+        elif address[-1].upper() == "C":
+            return self.read(address, 1, simulation)[0][0:8]
+        else:
+            raise AXIOverUDPProtocolError("Address not aligned to 32-bit word")
+
+    def raw_write(self, packet: bytes, simulation: bool = False) -> bool:
+        try:
+            self.udp_sock.sendto(packet, (self.destination.ip, self.destination.port))
+        except:
+            raise UDPSendError
+        if simulation:
+            time.sleep(1)
+        data: bytes
+        try:
+            (data, _) = self.udp_sock.recvfrom(1)
+        except:
+            raise UDPReceiveError
+        if simulation:
+            time.sleep(1)
+        if binascii.hexlify(data) == b"02":
+            raise AXISlaveError("Write slave error: Crossing 4K boundary on write burst or writing invalid register")
+        elif binascii.hexlify(data) == b"03":
+            raise AXIDecodeError("Write decode error")
+        return binascii.hexlify(data) == b"00"
+
+    def write_strobe(self, address: str, data: list[str], strb: str, simulation: bool = False) -> bool:
+        if address[0:2] == "0x":
+            address = address[2:]
+        for item in data:
+            if item[0:2] == "0x":
+                item = item[2:]
+        if (len(data) > 256):
+            raise AXIProtocolError("Trying to write more than 256 words")
+        if (int(address, 16) // 4096 != (int(address, 16) + len(data) - 1) // 4096):
+            raise AXIProtocolError("Write burst crosses 4K boundary")
+        if (len(strb) != 1):
+            raise AXIProtocolError("Write strobe length should be 1")
+        packet: str = ""
+        packet = packet + strb
+        packet = packet + "1" # R/W bit - 1 for write
+        packet = packet + address.zfill(8).upper() # 32-bit address
+        packet = packet + '{:02x}'.format(len(data) - 1) # length - 1 because 0 represents 1 word write
+        packet = packet + ''.join([ word.zfill(32).upper() for word in data ])
+        packet_bytes: bytes = binascii.unhexlify(packet)
+        rv: bool = self.raw_write(packet_bytes, simulation)
+        return rv
+
+    def write(self, address: str, data: list[str], simulation: bool = False) -> bool:
+        if address[0:2] == "0x":
+            address = address[2:]
+        for item in data:
+            if item[0:2] == "0x":
+                item = item[2:]
+        return self.write_strobe(address, data, "F", simulation)
+
+    def write_32bit(self, address: str, data: str, simulation: bool = False) -> bool:
+        if address[0:2] == "0x":
+            address = address[2:]
+        if data[0:2] == "0x":
+            data = data[2:]
+        if address[-1].upper() == "0":
+            return self.write_strobe(address, [data + "0" * 0], "1", simulation)
+        elif address[-1].upper() == "4":
+            return self.write_strobe(address, [data + "0" * 8], "2", simulation)
+        elif address[-1].upper() == "8":
+            return self.write_strobe(address, [data + "0" * 16], "4", simulation)
+        elif address[-1].upper() == "C":
+            return self.write_strobe(address, [data + "0" * 24], "8", simulation)
+        else:
+            raise AXIOverUDPProtocolError("Address not aligned to 32-bit word")
+
+def parse(arg: str) -> tuple[str]:
+    return tuple(map(str, arg.split()))
+
+class DebugShell(cmd.Cmd):
+    def __init__(self, dut: DUT) -> None:
+        super(DebugShell, self).__init__()
+        self.dut: DUT = dut
+
+    def help_read(self) -> None:
+        print("Reads 32-bit word at 32-bit address in hexadecimal\n")
+        print("\tread <address>\n")
+
+    def do_read(self, arg: str) -> None:
+        try:
+            print(self.dut.read_32bit(*parse(arg)))
+        except TypeError as e:
+            self.help_read()
+            print(e)
+        except:
+            raise
+
+    def help_write(self) -> None:
+        print("Writes 32-bit word at 32-bit address in hexadecimal\n")
+        print("\twrite <address> <value>\n")
+
+    def do_write(self, arg: str) -> None:
+        try:
+            self.dut.write_32bit(*parse(arg))
+        except TypeError as e:
+            self.help_write()
+            print(e)
+        except:
+            raise
+
+if __name__ == "__main__":
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description='Settings for sending and receiving packets.')
+    parser.add_argument('source_ip', help='Source IP (IP to send packets from)', default = None)
+    parser.add_argument('source_port', help='Source port (Port to send packets from)', default = None)
+    parser.add_argument('destination_ip', help='Destination IP (IP to send packets to)', default = None)
+    parser.add_argument('destination_port', help='Destination port (Port to send packets to)')
+    parser.add_argument('--simulation', help='Simulator-friendly packet sending', action='store_true')
+
+    args: argparse.Namespace = parser.parse_args()
+
+    source_paramamters: UDPParameters = UDPParameters(args.source_ip, int(args.source_port))
+    destination_parameters: UDPParameters = UDPParameters(args.destination_ip, int(args.destination_port))
+    system: DUT = DUT(source_paramamters, destination_parameters)
+
+    shell = DebugShell(system)
+    shell.cmdloop()
+
+
+
+
+
+
+
+
+
+

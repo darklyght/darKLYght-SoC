@@ -27,7 +27,7 @@ $(HARD_SRC_DIR)/hdl/top.v: $(ROOT)/hardware/chisel/build.sbt $(HARD_SBT_LIST)
 sbt: $(HARD_SRC_DIR)/hdl/top.v
 
 sim: $(HARD_SRC_DIR)/hdl/top.v $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(HARD_SIM_CLIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v)
-	$(VERILATOR_BIN) -Wno-lint -LDFLAGS "-g -lutil" -CFLAGS "-g -I${HARD_SIM_DIR}/include" --cc --trace $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include +define+SIMULATION --top-module tb --threads 12 --threads-dpi all --exe $(HARD_SIM_CLIST) --build
+	$(VERILATOR_BIN) -Wno-lint -LDFLAGS "-g -lutil" -CFLAGS "-g -I${HARD_SIM_DIR}/include" --cc --trace $(HARD_SRC_LIST) $(HARD_SIM_LIST) $(wildcard ${HARD_SRC_DIR}/blackboxes/*.v) --Mdir $(HARD_SIM_DIR)/build -I$(HARD_SIM_DIR)/include +define+SIMULATION --top-module tb --threads 16 --threads-dpi all --exe $(HARD_SIM_CLIST) --build
 	cd $(HARD_SIM_DIR)/build/ && sudo ./Vtb
 
 $(HARD_BUILD_DIR)/post_synth.dcp: $(HARD_SRC_DIR)/syn.v $(HARD_SRC_LIST) $(HARD_SYN_CON) $(HARD_SYN_TCL)

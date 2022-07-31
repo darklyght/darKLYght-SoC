@@ -3,18 +3,52 @@ package project
 import chisel3._
 import chisel3.util._
 
-class top(val CLOCK_FREQUENCY: Int,
-          val UART_CLOCK_FREQUENCY: Int,
-          val ETHERNET_CLOCK_FREQUENCY: Int,
-          val HDMI_PIXEL_CLOCK_FREQUENCY: Int,
-          val UART_BAUD_RATE: Int,
-          val MAC: String,
-          val IP: String,
-          val DEBUG_PORT: String,
-          val MASTER_PORT: String,
-          val SLAVE_PORT: String,
-          val GATEWAY: String,
-          val SUBNET: String) extends Module {
+abstract class Parameters {
+    def CLOCK_FREQUENCY: Int
+    def UART_CLOCK_FREQUENCY: Int
+    def ETHERNET_CLOCK_FREQUENCY: Int
+    def HDMI_PIXEL_CLOCK_FREQUENCY: Int
+    def UART_BAUD_RATE: Int
+    def MAC: String
+    def IP: String
+    def DEBUG_PORT: String
+    def MASTER_PORT: String
+    def SLAVE_PORT: String
+    def GATEWAY: String
+    def SUBNET: String
+}
+
+object Synthesis extends Parameters {
+    val CLOCK_FREQUENCY = 100000000
+    val UART_CLOCK_FREQUENCY = 117966903
+    val ETHERNET_CLOCK_FREQUENCY = 125000000
+    val HDMI_PIXEL_CLOCK_FREQUENCY = 148500000
+    val UART_BAUD_RATE = 115200
+    val MAC = "h000000000002"
+    val IP = "hC0A80180"
+    val DEBUG_PORT = "h4D2"
+    val MASTER_PORT = "h4D3"
+    val SLAVE_PORT = "h4D4"
+    val GATEWAY = "hC0A80101"
+    val SUBNET = "hFFFFFFFF"
+}
+
+object Simulation extends Parameters {
+    val CLOCK_FREQUENCY = 100000000
+    val UART_CLOCK_FREQUENCY = 117966903
+    val ETHERNET_CLOCK_FREQUENCY = 125000000
+    val HDMI_PIXEL_CLOCK_FREQUENCY = 148500000
+    val UART_BAUD_RATE = 29491200
+    val MAC = "h000000000000"
+    val IP = "h7F000080"
+    val DEBUG_PORT = "h4D2"
+    val MASTER_PORT = "h4D3"
+    val SLAVE_PORT = "h4D4"
+    val GATEWAY = "h7F000001"
+    val SUBNET = "hFFFFFFFF"
+}
+
+class top(val params: Parameters) extends Module {
     val io = IO(new Bundle {
         val uart_clock = Input(Clock())
         val uart = new UARTSerial()
@@ -29,20 +63,20 @@ class top(val CLOCK_FREQUENCY: Int,
         val hdmi = new HDMIInterface()
     })
 
-    val reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
+    val reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     reset_sync.reset := false.B
     reset_sync.io.input := reset.asUInt
-    val uart_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = UART_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
+    val uart_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.UART_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     uart_reset_sync.reset := false.B
     uart_reset_sync.io.input := reset.asUInt
-    val ethernet_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = ETHERNET_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
+    val ethernet_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.ETHERNET_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     ethernet_reset_sync.reset := false.B
     ethernet_reset_sync.io.input := reset.asUInt
-    val hdmi_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = HDMI_PIXEL_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
+    val hdmi_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.HDMI_PIXEL_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     hdmi_reset_sync.reset := false.B
     hdmi_reset_sync.io.input := reset.asUInt
 
-    val uart = Module(new UARTDriver(CLOCK_FREQUENCY = UART_CLOCK_FREQUENCY, BAUD_RATE = UART_BAUD_RATE))
+    val uart = Module(new UARTDriver(CLOCK_FREQUENCY = params.UART_CLOCK_FREQUENCY, BAUD_RATE = params.UART_BAUD_RATE))
     uart.clock := io.uart_clock
     uart.reset := uart_reset_sync.io.output.asBool
     uart.io.uart_clock := io.uart_clock
@@ -143,8 +177,8 @@ class top(val CLOCK_FREQUENCY: Int,
     // }
     // io.hdmi <> hdmi.io.hdmi
 
-    val network = Module(new Network(MAC = MAC, IP = IP, GATEWAY = GATEWAY, SUBNET = SUBNET))
-    val debugger = Module(new UDPToAXI4Full(MAC = MAC, IP = IP, PORT = DEBUG_PORT, DATA_WIDTH = 128, ADDR_WIDTH = 32, ID_WIDTH = 1))
+    val network = Module(new Network(MAC = params.MAC, IP = params.IP, GATEWAY = params.GATEWAY, SUBNET = params.SUBNET))
+    val debugger = Module(new UDPToAXI4Full(MAC = params.MAC, IP = params.IP, PORT = params.DEBUG_PORT, DATA_WIDTH = 128, ADDR_WIDTH = 32, ID_WIDTH = 1))
     val REG_FILE_DATA_WIDTH = 128
     val REG_FILE_ADDR_WIDTH = 6
     val REG_FILE_ADDR_WIDTH_EFF = REG_FILE_ADDR_WIDTH - log2Ceil(REG_FILE_DATA_WIDTH / 8)
@@ -228,11 +262,6 @@ class top(val CLOCK_FREQUENCY: Int,
     hdmi.io.internal.audio(1) := Mux(hdmi_audio.io.output.valid, Cat(0.U(8.W), hdmi_audio.io.output.bits.tdata(31, 16)), 0.U)
     hdmi_audio.io.output.ready := audio_clock_sync(1) & ~audio_clock_sync(2)
 
-    // withClock(io.hdmi_audio_clock) {
-    //     val audio = RegInit(VecInit(Seq.fill(2)(0.U(24.W))))
-    //     audio(0) := audio(0) + 65536.U
-    //     audio(1) := audio(1) + 65536.U
-    // }
     io.hdmi <> hdmi.io.hdmi
 
     // Loopback
@@ -264,31 +293,6 @@ class top(val CLOCK_FREQUENCY: Int,
 
 object Instance extends App {
     (new chisel3.stage.ChiselStage).execute(
-        Array("-X", "mverilog", "--target-dir", "../src/hdl"),
-        Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new top(CLOCK_FREQUENCY = 100000000,
-                                                                  UART_CLOCK_FREQUENCY = 117966903,
-                                                                  ETHERNET_CLOCK_FREQUENCY = 125000000,
-                                                                  HDMI_PIXEL_CLOCK_FREQUENCY = 148500000,
-                                                                  UART_BAUD_RATE = 115200,
-                                                                  MAC = "h000000000002",
-                                                                  IP = "hC0A80180",
-                                                                  DEBUG_PORT = "h4D2",
-                                                                  MASTER_PORT = "h4D3",
-                                                                  SLAVE_PORT = "h4D4",
-                                                                  GATEWAY = "hC0A80101",
-                                                                  SUBNET = "hFFFFFFFF"))))
-    // (new chisel3.stage.ChiselStage).execute(
-    //     Array("-X", "mverilog", "--target-dir", "../src/hdl"),
-    //     Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new top(CLOCK_FREQUENCY = 100000000,
-    //                                                               UART_CLOCK_FREQUENCY = 117966903,
-    //                                                               ETHERNET_CLOCK_FREQUENCY = 125000000,
-    //                                                               HDMI_PIXEL_CLOCK_FREQUENCY = 148500000,
-    //                                                               UART_BAUD_RATE = 29491200,
-    //                                                               MAC = "h000000000000",
-    //                                                               IP = "h7F000080",
-    //                                                               DEBUG_PORT = "h4D2",
-    //                                                               MASTER_PORT = "h4D3",
-    //                                                               SLAVE_PORT = "h4D4",
-    //                                                               GATEWAY = "h7F000001",
-    //                                                               SUBNET = "hFFFFFFFF"))))
+       Array("-X", "mverilog", "--target-dir", "../src/hdl"),
+       Seq(chisel3.stage.ChiselGeneratorAnnotation(() => new top(Simulation))))
 }
