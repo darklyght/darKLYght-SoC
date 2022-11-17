@@ -245,13 +245,13 @@ class Cache(val ADDR_WIDTH: Int = 32,
     data_mem_wstrb_fe := Fill(N_WAYS, Fill(math.pow(2, WORD_INDEX_WIDTH).toInt, Fill(N_BYTES, false.B))).asTypeOf(data_mem_wstrb_fe)
     data_mem_wstrb_be := Fill(N_WAYS, Fill(math.pow(2, N_BURST).toInt, Fill(AXI4_N_BYTES, false.B))).asTypeOf(data_mem_wstrb_be)
     data_mem_wstrb_fe(way_hit_bin)(word) := (Fill(N_BYTES, state === State.sCheck && hit && frontend_request_reg.write) & write_strobe).asTypeOf(Vec(N_BYTES, Bool()))
-    data_mem_wstrb_be(way_select_bin_reg)(burst) := Fill(AXI4_N_BYTES, io.backend.r.fire()).asTypeOf(Vec(AXI4_N_BYTES, Bool()))
+    data_mem_wstrb_be(way_select_bin_reg)(burst) := Fill(AXI4_N_BYTES, state === State.sReadMemData && io.backend.r.fire()).asTypeOf(Vec(AXI4_N_BYTES, Bool()))
     data_mem_raddr := Mux(state =/= State.sIdle && state =/= State.sCheck, line, io.frontend.request.bits.address(ADDR_WIDTH - TAG_WIDTH - 1, ADDR_WIDTH - TAG_WIDTH - LINE_INDEX_WIDTH))
 
     tag_mem_waddr := line
     tag_mem_wdata := Fill(N_WAYS, tag).asTypeOf(tag_mem_wdata)
     tag_mem_wstrb := Fill(N_WAYS, false.B).asTypeOf(tag_mem_wstrb)
-    tag_mem_wstrb(way_select_bin_reg) := io.backend.r.fire() && io.backend.r.bits.last
+    tag_mem_wstrb(way_select_bin_reg) := state === State.sReadMemData && io.backend.r.fire() && io.backend.r.bits.last
     tag_mem_raddr := Mux(state =/= State.sIdle && state =/= State.sCheck, line, io.frontend.request.bits.address(ADDR_WIDTH - TAG_WIDTH - 1, ADDR_WIDTH - TAG_WIDTH - LINE_INDEX_WIDTH))
 
     switch (state) {
