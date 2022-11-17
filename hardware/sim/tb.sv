@@ -134,14 +134,18 @@ assign s_axi_rvalid = PIPELINE_OUTPUT ? s_axi_rvalid_pipe_reg : s_axi_rvalid_reg
 
 integer i, j;
 
+// initial begin
+//     // two nested loops for smaller number of iterations per loop
+//     // workaround for synthesizer complaints about large loop counts
+//     for (i = 0; i < 2**VALID_ADDR_WIDTH; i = i + 2**(VALID_ADDR_WIDTH/2)) begin
+//         for (j = i; j < i + 2**(VALID_ADDR_WIDTH/2); j = j + 1) begin
+//             mem[j] = 0;
+//         end
+//     end
+// end
+
 initial begin
-    // two nested loops for smaller number of iterations per loop
-    // workaround for synthesizer complaints about large loop counts
-    for (i = 0; i < 2**VALID_ADDR_WIDTH; i = i + 2**(VALID_ADDR_WIDTH/2)) begin
-        for (j = i; j < i + 2**(VALID_ADDR_WIDTH/2); j = j + 1) begin
-            mem[j] = 0;
-        end
-    end
+    $readmemh("/home/darklyght/darKLYght-SoC/software/src/test/test.hex", mem);
 end
 
 always @* begin
@@ -349,6 +353,7 @@ module tb (
     input i_ethernet_clock_90,
     input i_hdmi_pixel_clock,
     input i_hdmi_audio_clock,
+    input i_cpu_clock,
     input i_reset
 );
     
@@ -511,8 +516,18 @@ module tb (
         .io_dram_r_bits_resp(dram_axi_rresp),
         .io_dram_r_bits_last(dram_axi_rlast),
         .io_hdmi_pixel_clock(i_hdmi_pixel_clock),
-        .io_hdmi_audio_clock(i_hdmi_audio_clock)
+        .io_hdmi_audio_clock(i_hdmi_audio_clock),
+        .io_cpu_clock(i_cpu_clock)
     );
+
+    always @ (posedge i_clock) begin
+        if (top.cpu_iBus_cmd_valid && top.cpu_iBus_cmd_ready) begin
+            $display("%x", top.cpu_iBus_cmd_payload_pc);
+        end
+        if (top.cpu_iBus_rsp_valid) begin
+            $display("%x", top.cpu_iBus_rsp_payload_inst);
+        end
+    end
 
 endmodule
 /* verilator lint_on WIDTH */

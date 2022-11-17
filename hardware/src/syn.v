@@ -88,6 +88,39 @@ module syn (
         .O(dram_clock)
     );
 
+    wire cpu_clock_int;
+    wire cpu_clock_fb;
+    wire cpu_clock_locked;
+    wire cpu_clock;
+
+    MMCME2_BASE #(
+        .BANDWIDTH("OPTIMIZED"),
+        .CLKOUT4_CASCADE("FALSE"),
+        .STARTUP_WAIT("FALSE"),
+        .CLKIN1_PERIOD(10.000),
+        .DIVCLK_DIVIDE(1),
+        .CLKFBOUT_MULT_F(10.000),
+        .CLKFBOUT_PHASE(0.000),
+        .CLKOUT0_DIVIDE_F(20.000),
+        .CLKOUT0_PHASE(0.000),
+        .CLKOUT0_DUTY_CYCLE(0.500)
+    ) cpu_clock_mmcm (
+        .CLKFBOUT(cpu_clock_fb),
+        .CLKFBOUTB(),
+        .CLKOUT0(cpu_clock_int),
+        .CLKOUT0B(),
+        .CLKFBIN(cpu_clock_fb),
+        .CLKIN1(i_clock_int),
+        .LOCKED(cpu_clock_locked),
+        .PWRDWN(1'b0),
+        .RST(reset)
+    );
+
+    BUFG cpu_clock_bufg (
+        .I(cpu_clock_int),
+        .O(cpu_clock)
+    );
+
     wire uart_clock_int;
     wire uart_clock_fb;
     wire uart_clock_locked;
@@ -808,7 +841,7 @@ module syn (
 
     top top (
         .clock(top_clock),
-        .reset(reset || ~top_clock_locked || ~uart_clock_locked || ~ethernet_clock_locked || ~hdmi_video_clock_locked || ~hdmi_audio_clock_locked),
+        .reset(reset || ~top_clock_locked || ~uart_clock_locked || ~ethernet_clock_locked || ~hdmi_video_clock_locked || ~hdmi_audio_clock_locked || ~cpu_clock_locked),
         .io_uart_clock(uart_clock),
         .io_uart_rx(i_uart_rx),
         .io_uart_tx(o_uart_tx),
@@ -864,7 +897,8 @@ module syn (
         .io_hdmi_tmds_clock(hdmi_tmds_clock),
         .io_hdmi_tmds_0(hdmi_tmds_0),
         .io_hdmi_tmds_1(hdmi_tmds_1),
-        .io_hdmi_tmds_2(hdmi_tmds_2)
+        .io_hdmi_tmds_2(hdmi_tmds_2),
+        .io_cpu_clock(cpu_clock)
     );
 
 endmodule

@@ -1,0 +1,31 @@
+RISCV = /opt/riscv/bin/riscv32-unknown-elf
+
+LIB_PATH = ../../lib
+LIB_SOURCES = $(wildcard ${LIB_PATH}/*.c)
+CSRCS = $(wildcard *.c)
+SSRCS = $(wildcard *.s)
+LDSRC = $(TARGET).ld
+
+GCC_OPTS += -mabi=ilp32 -march=rv32i -static -mcmodel=medany -nostdlib -nostartfiles -T $(LDSRC)
+
+default: $(TARGET).elf
+
+SOURCES = $(CSRCS) $(SSRCS)
+ifeq ($(INCLUDE_LIB), true)
+	SOURCES += $(LIB_SOURCES)
+endif
+
+BIN2HEX = python3 ../../scripts/freedom-bin2hex.py
+
+$(TARGET).elf: $(SOURCES)
+	$(RISCV)-gcc $(GCC_OPTS) -I$(LIB_PATH) $^ -o $@
+	$(RISCV)-objdump -D -Mnumeric $@ > $(basename $@).dump
+	$(RISCV)-strip -R .comment -R .note.gnu.build-id $@
+	$(RISCV)-objcopy $(basename $@).elf -O binary $(basename $@).bin
+	$(BIN2HEX) -w 128 $(basename $@).bin $(basename $@).hex
+	sed -i '1i @0' $(basename $@).hex
+
+clean:
+	rm -f *.elf *.dump *.hex *.bin
+
+.PHONY: target

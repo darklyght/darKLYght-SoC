@@ -30,6 +30,8 @@ def raw_read(packet, length, simulation=False):
     data, addr = udp_sock.recvfrom(length + 1)
     if simulation:
         time.sleep(1)
+    if data[-1] << 4 >> 6 == 1:
+        print("Read error")
     if data[-1] << 2 >> 6 == 2:
         print("Read slave error: Crossing 4K boundary on read burst or reading invalid register")
     elif data[-1] >> 6 == 3:
@@ -45,7 +47,9 @@ def raw_write(packet, simulation=False):
     data, addr = udp_sock.recvfrom(1)
     if simulation:
         time.sleep(1)
-    if binascii.hexlify(data) == b"02":
+    if binascii.hexlify(data) == b"01":
+        print("Write error")
+    elif binascii.hexlify(data) == b"02":
         print("Write slave error: Crossing 4K boundary on write burst or writing invalid register")
     elif binascii.hexlify(data) == b"03":
         print("Write decode error")

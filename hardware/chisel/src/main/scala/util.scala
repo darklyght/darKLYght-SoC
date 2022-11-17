@@ -362,7 +362,7 @@ class SSDDRInput[T <: Data](val TYPE: T) extends Module {
     io.output_q2 := iddr.io.Q2.asTypeOf(TYPE)
 }
 
-class LFSR (val WIDTH: Int,
+class CRC_LFSR (val WIDTH: Int,
             val POLYNOMIAL: BigInt,
             val CONFIGURATION: String,
             val FEED_FORWARD: Boolean,

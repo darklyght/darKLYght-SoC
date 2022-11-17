@@ -10,6 +10,7 @@ create_clock -period 8.000 -name i_ethernet_rx_clock [get_ports i_ethernet_rx_cl
 #set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets i_clock_IBUF]
 set_clock_groups -asynchronous -group [get_clocks uart_clock_int]
 set_clock_groups -asynchronous -group [get_clocks hdmi_audio_clock_int]
+set_clock_groups -asynchronous -group [get_clocks cpu_clock_int]
 set_clock_groups -asynchronous -group [get_clocks {hdmi_output_clock_int hdmi_pixel_clock_int}]
 set_clock_groups -asynchronous -group [get_clocks {i_ethernet_rx_clock ethernet_clock_int ethernet_clock90_int ethernet_200clock_int}]
 # tx_clock_1_reg and tx_clock_2_reg only change at most once every 2 ethernet_clock cycles

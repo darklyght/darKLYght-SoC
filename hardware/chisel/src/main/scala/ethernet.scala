@@ -824,7 +824,7 @@ class GMIIRx(val USER_WIDTH: Int) extends Module {
         io.status.error_bad_fcs.get := error_bad_fcs
 
         val crc_state = RegInit("hFFFFFFFF".U(32.W))
-        val lfsr = Module(new LFSR(WIDTH = 32,
+        val lfsr = Module(new CRC_LFSR(WIDTH = 32,
                                    POLYNOMIAL = BigInt("4c11db7", 16),
                                    CONFIGURATION = "GALOIS",
                                    FEED_FORWARD = false,
@@ -954,7 +954,7 @@ class GMIITx(val PADDING: Boolean,
         io.status.error_underflow.get := error_underflow
 
         val crc_state = RegInit("hFFFFFFFF".U(32.W))
-        val lfsr = Module(new LFSR(WIDTH = 32,
+        val lfsr = Module(new CRC_LFSR(WIDTH = 32,
                                    POLYNOMIAL = BigInt("4c11db7", 16),
                                    CONFIGURATION = "GALOIS",
                                    FEED_FORWARD = false,

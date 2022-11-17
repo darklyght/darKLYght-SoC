@@ -39,7 +39,6 @@ class HDMIAudioBuffer(val DATA_WIDTH: Int,
                       val FIFO_DEPTH: Int,
                       val THRESHOLD: Int) extends Module {
     val io = IO(new Bundle {
-        val audio_clock = Input(Clock())
         val M_AXI = new AXI4Full(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH)
         val output = Decoupled(new AXIStream(DATA_WIDTH = 32,
                                              KEEP_EN = false,
@@ -74,6 +73,64 @@ class HDMIAudioBuffer(val DATA_WIDTH: Int,
     dma.io.done <> io.done
 
     io.output <> dma.io.output
+}
+
+class HDMIVideoBuffer(val DATA_WIDTH: Int,
+                      val ADDR_WIDTH: Int,
+                      val ID_WIDTH: Int,
+                      val FIFO_DEPTH: Int,
+                      val THRESHOLD: Int,
+                      val ASYNC_DEPTH: Int) extends Module {
+    val io = IO(new Bundle {
+        val pixel_clock = Input(Clock())
+        val M_AXI = new AXI4Full(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH)
+        val output = Decoupled(new AXIStream(DATA_WIDTH = 32,
+                                             KEEP_EN = false,
+                                             LAST_EN = false,
+                                             ID_WIDTH = 0,
+                                             DEST_WIDTH = 0,
+                                             USER_WIDTH = 0))
+        val address = Input(UInt(32.W))
+        val length = Input(UInt(30.W))
+        val start = Input(Bool())
+        val repeat = Input(Bool())
+        val done = Output(Bool())
+    })
+
+    val dma = Module(new AXI4FullToAXIStream(AXIS_DATA_WIDTH = 32,
+                                             AXIS_KEEP_EN = false,
+                                             AXIS_LAST_EN = false,
+                                             AXIS_ID_WIDTH = 0,
+                                             AXIS_DEST_WIDTH = 0,
+                                             AXIS_USER_WIDTH = 0,
+                                             AXI4_DATA_WIDTH = DATA_WIDTH,
+                                             AXI4_ADDR_WIDTH = ADDR_WIDTH,
+                                             AXI4_ID_WIDTH = ID_WIDTH,
+                                             FIFO_DEPTH = FIFO_DEPTH,
+                                             THRESHOLD = THRESHOLD))
+
+    val output = Module(new AXIStreamAsyncFIFO(FIFO_DEPTH = 2048,
+                                               DATA_WIDTH = 32,
+                                               KEEP_EN = false,
+                                               LAST_EN = false,
+                                               ID_WIDTH = 0,
+                                               DEST_WIDTH = 0,
+                                               USER_WIDTH = 0))
+
+    dma.io.M_AXI <> io.M_AXI
+    dma.io.address <> io.address
+    dma.io.length <> io.length
+    dma.io.start <> io.start
+    dma.io.repeat <> io.repeat
+    dma.io.done <> io.done
+
+    io.output <> output.io.deq
+
+    dma.io.output <> output.io.enq
+
+    output.io.enq_clock := clock
+    output.io.deq_clock := io.pixel_clock
+
 }
 
 class HDMI(val DATA_DELAY: Int = 1,

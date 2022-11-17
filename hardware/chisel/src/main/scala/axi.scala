@@ -56,12 +56,49 @@ class AXI4FullR(val DATA_WIDTH: Int, val ID_WIDTH: Int) extends Bundle {
     val last = Bool()
 }
 
-class AXIStreamAsyncFIFO(val DATA_WIDTH: Int = 8,
+class AXI4FullAAsyncFIFO(val FIFO_DEPTH: Int = 16,
+                         val ADDR_WIDTH: Int,
+                         val ID_WIDTH: Int) extends AsyncFIFO[AXI4FullA](DEPTH = FIFO_DEPTH,
+                                                                         FRAME_FIFO = false,
+                                                                         DROP_WHEN_FULL = true,
+                                                                         DROP_BAD_FRAME = false,
+                                                                         OUTPUT_PIPE = 1,
+                                                                         new AXI4FullA(ADDR_WIDTH = ADDR_WIDTH,
+                                                                                       ID_WIDTH = ID_WIDTH))
+
+class AXI4FullWAsyncFIFO(val FIFO_DEPTH: Int = 16,
+                         val DATA_WIDTH: Int) extends AsyncFIFO[AXI4FullW](DEPTH = FIFO_DEPTH,
+                                                                           FRAME_FIFO = false,
+                                                                           DROP_WHEN_FULL = true,
+                                                                           DROP_BAD_FRAME = false,
+                                                                           OUTPUT_PIPE = 1,
+                                                                           new AXI4FullW(DATA_WIDTH = DATA_WIDTH))
+
+class AXI4FullBAsyncFIFO(val FIFO_DEPTH: Int = 16,
+                         val ID_WIDTH: Int) extends AsyncFIFO[AXI4FullB](DEPTH = FIFO_DEPTH,
+                                                                         FRAME_FIFO = false,
+                                                                         DROP_WHEN_FULL = true,
+                                                                         DROP_BAD_FRAME = false,
+                                                                         OUTPUT_PIPE = 1,
+                                                                         new AXI4FullB(ID_WIDTH = ID_WIDTH))
+
+class AXI4FullRAsyncFIFO(val FIFO_DEPTH: Int = 16,
+                         val DATA_WIDTH: Int,
+                         val ID_WIDTH: Int) extends AsyncFIFO[AXI4FullR](DEPTH = FIFO_DEPTH,
+                                                                         FRAME_FIFO = false,
+                                                                         DROP_WHEN_FULL = true,
+                                                                         DROP_BAD_FRAME = false,
+                                                                         OUTPUT_PIPE = 1,
+                                                                         new AXI4FullR(DATA_WIDTH = DATA_WIDTH,
+                                                                                       ID_WIDTH = ID_WIDTH))
+
+class AXIStreamAsyncFIFO(val FIFO_DEPTH: Int = 16,
+                         val DATA_WIDTH: Int = 8,
                          val KEEP_EN: Boolean = true,
                          val LAST_EN: Boolean = true,
                          val ID_WIDTH: Int = 8,
                          val DEST_WIDTH: Int = 8,
-                         val USER_WIDTH: Int = 8) extends AsyncFIFO[AXIStream](DEPTH = 16,
+                         val USER_WIDTH: Int = 8) extends AsyncFIFO[AXIStream](DEPTH = FIFO_DEPTH,
                                                                                FRAME_FIFO = false,
                                                                                DROP_WHEN_FULL = true,
                                                                                DROP_BAD_FRAME = false,
@@ -73,6 +110,46 @@ class AXIStreamAsyncFIFO(val DATA_WIDTH: Int = 8,
                                                                                              DEST_WIDTH = DEST_WIDTH,
                                                                                              USER_WIDTH = USER_WIDTH))
 
+class AXI4FullAsyncFIFO(val FIFO_DEPTH: Int = 16,
+                        val DATA_WIDTH: Int,
+                        val ADDR_WIDTH: Int,
+                        val ID_WIDTH: Int) extends Module {
+    val io = IO(new Bundle {
+        val M_AXI_clock = Input(Clock())
+        val S_AXI_clock = Input(Clock())
+        val M_AXI = new AXI4Full(DATA_WIDTH = DATA_WIDTH, ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH)
+        val S_AXI = Flipped(new AXI4Full(DATA_WIDTH = DATA_WIDTH, ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH))
+    })
+    val aw = Module(new AXI4FullAAsyncFIFO(FIFO_DEPTH = FIFO_DEPTH, ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH))
+    val w = Module(new AXI4FullWAsyncFIFO(FIFO_DEPTH = FIFO_DEPTH, DATA_WIDTH = DATA_WIDTH))
+    val b = Module(new AXI4FullBAsyncFIFO(FIFO_DEPTH = FIFO_DEPTH, ID_WIDTH = ID_WIDTH))
+    val ar = Module(new AXI4FullAAsyncFIFO(FIFO_DEPTH = FIFO_DEPTH, ADDR_WIDTH = ADDR_WIDTH, ID_WIDTH = ID_WIDTH))
+    val r = Module(new AXI4FullRAsyncFIFO(FIFO_DEPTH = FIFO_DEPTH, DATA_WIDTH = DATA_WIDTH, ID_WIDTH = ID_WIDTH))
+
+    aw.io.enq_clock := io.S_AXI_clock
+    w.io.enq_clock := io.S_AXI_clock
+    b.io.enq_clock := io.M_AXI_clock
+    ar.io.enq_clock := io.S_AXI_clock
+    r.io.enq_clock := io.M_AXI_clock
+
+    aw.io.deq_clock := io.M_AXI_clock
+    w.io.deq_clock := io.M_AXI_clock
+    b.io.deq_clock := io.S_AXI_clock
+    ar.io.deq_clock := io.M_AXI_clock
+    r.io.deq_clock := io.S_AXI_clock
+
+    aw.io.enq <> io.S_AXI.aw
+    w.io.enq <> io.S_AXI.w
+    b.io.enq <> io.M_AXI.b
+    ar.io.enq <> io.S_AXI.ar
+    r.io.enq <> io.M_AXI.r
+
+    aw.io.deq <> io.M_AXI.aw
+    w.io.deq <> io.M_AXI.w
+    b.io.deq <> io.S_AXI.b
+    ar.io.deq <> io.M_AXI.ar
+    r.io.deq <> io.S_AXI.r
+}
 
 class AXICrossbar(val DATA_WIDTH: Int,
                   val ADDR_WIDTH: Int,
@@ -538,24 +615,20 @@ class AXI4FullToAXIStream(val AXIS_DATA_WIDTH: Int,
     val WORD_ADDR_WIDTH = log2Ceil(N_BYTES)
     val frame_pointer = RegInit(0.U(log2Ceil(N_CYCLES).W))
     val done = RegInit(false.B)
-    val fifo = Module(new Queue(new AXIStream(DATA_WIDTH = AXIS_DATA_WIDTH,
-                                              KEEP_EN = AXIS_KEEP_EN,
-                                              LAST_EN = AXIS_LAST_EN,
-                                              ID_WIDTH = AXIS_ID_WIDTH,
-                                              DEST_WIDTH = AXIS_DEST_WIDTH,
-                                              USER_WIDTH = AXIS_USER_WIDTH), FIFO_DEPTH))
+
+    val input_fifo = Module(new Queue(UInt(AXI4_DATA_WIDTH.W), FIFO_DEPTH))
+    val output_fifo = Module(new Queue(new AXIStream(DATA_WIDTH = AXIS_DATA_WIDTH,
+                                                     KEEP_EN = AXIS_KEEP_EN,
+                                                     LAST_EN = AXIS_LAST_EN,
+                                                     ID_WIDTH = AXIS_ID_WIDTH,
+                                                     DEST_WIDTH = AXIS_DEST_WIDTH,
+                                                     USER_WIDTH = AXIS_USER_WIDTH), AXI4_DATA_WIDTH / AXIS_DATA_WIDTH))
 
     object State extends ChiselEnum {
         val sIdle, sWait, sReadAddr, sReadData, sDone = Value
     }
 
     val state = RegInit(State.sIdle)
-
-    fifo.io.enq.bits.tdata := (io.M_AXI.r.bits.data << (frame_pointer * AXIS_DATA_WIDTH.U))(AXI4_DATA_WIDTH - 1, AXI4_DATA_WIDTH - AXIS_DATA_WIDTH)
-    fifo.io.enq.valid := io.M_AXI.r.valid
-
-    io.output <> fifo.io.deq
-    io.done := done
 
     val current_address = RegInit(0.U((32 - WORD_ADDR_WIDTH).W))
     val remaining = RegInit(0.U(30.W))
@@ -579,6 +652,24 @@ class AXI4FullToAXIStream(val AXIS_DATA_WIDTH: Int,
     }
     next_address := current_address + next_length
 
+    when (output_fifo.io.enq.fire()) {            
+        when (frame_pointer === (N_CYCLES - 1).U) {
+            frame_pointer := 0.U
+        } .otherwise {
+            frame_pointer := frame_pointer + 1.U
+        }
+    }
+
+    input_fifo.io.enq.bits := io.M_AXI.r.bits.data
+    input_fifo.io.enq.valid := io.M_AXI.r.valid
+    input_fifo.io.deq.ready := output_fifo.io.enq.ready && frame_pointer === (N_CYCLES - 1).U
+
+    output_fifo.io.enq.bits.tdata := (input_fifo.io.deq.bits << (frame_pointer * AXIS_DATA_WIDTH.U))(AXI4_DATA_WIDTH - 1, AXI4_DATA_WIDTH - AXIS_DATA_WIDTH)
+    output_fifo.io.enq.valid := input_fifo.io.deq.valid
+
+    io.output <> output_fifo.io.deq
+    io.done := done
+
     switch (state) {
         is (State.sIdle) {
             when (io.start) {
@@ -591,7 +682,7 @@ class AXI4FullToAXIStream(val AXIS_DATA_WIDTH: Int,
             when (~io.start) {
                 state := State.sIdle
                 done := false.B
-            } .elsewhen (fifo.io.count < THRESHOLD.U) {
+            } .elsewhen (input_fifo.io.count < THRESHOLD.U) {
                 state := State.sReadAddr
                 length := next_length
             }
@@ -604,19 +695,14 @@ class AXI4FullToAXIStream(val AXIS_DATA_WIDTH: Int,
             }
         }
         is (State.sReadData) {
-            when (fifo.io.enq.fire()) {            
-                when (frame_pointer === (N_CYCLES - 1).U) {
-                    frame_pointer := 0.U
-                    when (io.M_AXI.r.bits.last) {
-                        when (remaining === 0.U) {
-                            state := State.sDone
-                            done := true.B
-                        } .otherwise {
-                            state := State.sWait
-                        }
+            when (input_fifo.io.enq.fire()) {
+                when (io.M_AXI.r.bits.last) {
+                    when (remaining === 0.U) {
+                        state := State.sDone
+                        done := true.B
+                    } .otherwise {
+                        state := State.sWait
                     }
-                } .otherwise {
-                    frame_pointer := frame_pointer + 1.U
                 }
             }
         }
@@ -644,7 +730,7 @@ class AXI4FullToAXIStream(val AXIS_DATA_WIDTH: Int,
     io.M_AXI.ar.bits.prot := 0.U
     io.M_AXI.ar.bits.qos := 0.U
     
-    io.M_AXI.r.ready := state === State.sReadData && frame_pointer === (N_CYCLES - 1).U
+    io.M_AXI.r.ready := state === State.sReadData && input_fifo.io.enq.ready
     
     io.M_AXI.aw.valid := false.B
     io.M_AXI.aw.bits.addr := 0.U
