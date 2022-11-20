@@ -520,14 +520,5 @@ module tb (
         .io_cpu_clock(i_cpu_clock)
     );
 
-    always @ (posedge i_clock) begin
-        if (top.cpu_iBus_cmd_valid && top.cpu_iBus_cmd_ready) begin
-            $display("%x", top.cpu_iBus_cmd_payload_pc);
-        end
-        if (top.cpu_iBus_rsp_valid) begin
-            $display("%x", top.cpu_iBus_rsp_payload_inst);
-        end
-    end
-
 endmodule
 /* verilator lint_on WIDTH */

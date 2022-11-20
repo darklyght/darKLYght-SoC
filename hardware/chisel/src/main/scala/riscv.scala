@@ -5,41 +5,6 @@ import chisel3.util._
 import chisel3.util.random.LFSR
 import chisel3.experimental.ChiselEnum
 
-class iBus_cmd extends Bundle {
-    val program_counter = UInt(32.W)
-}
-
-class iBus_rsp extends Bundle {
-    val error = Bool()
-    val instruction = UInt(32.W)
-}
-
-class iBus extends Bundle {
-    val cmd = Decoupled(new iBus_cmd)
-    val rsp = Flipped(Decoupled(new iBus_rsp))
-}
-
-class Interrupts extends Bundle {
-    val timer = Input(Bool())
-    val external = Input(Bool())
-    val software = Input(Bool())
-}
-
-class dbgBus_cmd extends Bundle {
-    val write = Bool()
-    val address = UInt(8.W)
-    val data = UInt(32.W)
-}
-
-class dbgBus_rsp extends Bundle {
-    val data = UInt(32.W)
-}
-
-class dbgBus extends Bundle {
-    val cmd = Decoupled(new dbgBus_cmd)
-    val rsp = Flipped(Decoupled(new dbgBus_cmd))
-}
-
 class dBus_cmd extends Bundle {
     val write = Bool()
     val address = UInt(32.W)

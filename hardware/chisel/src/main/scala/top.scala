@@ -67,31 +67,25 @@ class top(val params: Parameters) extends Module {
         val cpu_clock = Input(Clock())
     })
 
+    val cpu_reset_out = Wire(Reset())
     val reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     reset_sync.reset := false.B
-    reset_sync.io.input := reset.asUInt
+    reset_sync.io.input := reset.asUInt | cpu_reset_out.asUInt
     val uart_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.UART_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     uart_reset_sync.reset := false.B
-    uart_reset_sync.io.input := reset.asUInt
+    uart_reset_sync.io.input := reset.asUInt | cpu_reset_out.asUInt
     val ethernet_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.ETHERNET_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     ethernet_reset_sync.reset := false.B
-    ethernet_reset_sync.io.input := reset.asUInt
+    ethernet_reset_sync.io.input := reset.asUInt | cpu_reset_out.asUInt
     val hdmi_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.HDMI_PIXEL_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     hdmi_reset_sync.reset := false.B
-    hdmi_reset_sync.io.input := reset.asUInt
+    hdmi_reset_sync.io.input := reset.asUInt | cpu_reset_out.asUInt
+    val cache_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.CPU_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
+    cache_reset_sync.reset := false.B
+    cache_reset_sync.io.input := reset.asUInt | cpu_reset_out.asUInt
     val cpu_reset_sync = Module(new SyncDebouncer(CLOCK_FREQUENCY = params.CPU_CLOCK_FREQUENCY, SAMPLE_FREQUENCY = 100, WIDTH = 1))
     cpu_reset_sync.reset := false.B
     cpu_reset_sync.io.input := reset.asUInt
-
-    val uart = Module(new UARTDriver(CLOCK_FREQUENCY = params.UART_CLOCK_FREQUENCY, BAUD_RATE = params.UART_BAUD_RATE))
-    val uart_axi = Module(new UARTAXI(DATA_WIDTH = 128, ADDR_WIDTH = 32, ID_WIDTH = 8))
-    uart.reset := uart_reset_sync.io.output.asBool
-    uart.io.uart_clock := io.uart_clock
-
-    uart.io.uart.rx.serial <> io.uart.rx
-    io.uart.tx <> uart.io.uart.tx.serial
-    uart_axi.io.tx <> uart.io.uart.tx.data
-    uart_axi.io.rx <> uart.io.uart.rx.data
 
     val cpu = Module(new VexRiscv)
     val icache = Module(new Cache(ADDR_WIDTH = 32,
@@ -122,9 +116,14 @@ class top(val params: Parameters) extends Module {
                                                    DATA_WIDTH = 128,
                                                    ADDR_WIDTH = 32,
                                                    ID_WIDTH = 1))
-    
+    val uart = Module(new UARTDriver(CLOCK_FREQUENCY = params.UART_CLOCK_FREQUENCY, BAUD_RATE = params.UART_BAUD_RATE))
+    uart.reset := uart_reset_sync.io.output.asBool
+    val uart_axi = Module(new UARTAXI(DATA_WIDTH = 128, ADDR_WIDTH = 32, ID_WIDTH = 8))
+    uart_axi.reset := reset_sync.io.output.asBool
     val network = Module(new Network(MAC = params.MAC, IP = params.IP, GATEWAY = params.GATEWAY, SUBNET = params.SUBNET))
+    network.reset := reset_sync.io.output.asBool
     val debugger = Module(new UDPToAXI4Full(MAC = params.MAC, IP = params.IP, PORT = params.DEBUG_PORT, DATA_WIDTH = 128, ADDR_WIDTH = 32, ID_WIDTH = 1))
+    debugger.reset := reset_sync.io.output.asBool
     val REG_FILE_DATA_WIDTH = 128
     val REG_FILE_ADDR_WIDTH = 6
     val REG_FILE_ADDR_WIDTH_EFF = REG_FILE_ADDR_WIDTH - log2Ceil(REG_FILE_DATA_WIDTH / 8)
@@ -132,18 +131,20 @@ class top(val params: Parameters) extends Module {
     for (r <- 0 until math.pow(2, REG_FILE_ADDR_WIDTH_EFF).toInt) {
         register_file.io.input(r) := 0.U(REG_FILE_DATA_WIDTH.W)
     }
+    register_file.reset := reset_sync.io.output.asBool
     val hdmi = Module(new HDMI(DATA_DELAY = 8,
                                VIDEO_ID_CODE = 16,
                                DVI_OUTPUT = false,
                                VIDEO_REFRESH_RATE = 60,
                                AUDIO_RATE = 48000,
                                AUDIO_BIT_WIDTH = 24))
+    hdmi.reset := reset_sync.io.output.asBool
     val hdmi_audio = Module(new HDMIAudioBuffer(DATA_WIDTH = 128,
                                                 ADDR_WIDTH = 32,
                                                 ID_WIDTH = 1,
                                                 FIFO_DEPTH = 512,
                                                 THRESHOLD = 128))
-    
+    hdmi_audio.reset := reset_sync.io.output.asBool
     val axi_xbar = Module(new AXICrossbar(DATA_WIDTH = 128,
                                           ADDR_WIDTH = 32,
                                           ID_WIDTH = 8,
@@ -167,15 +168,19 @@ class top(val params: Parameters) extends Module {
                                               Seq(true.B, true.B, true.B),
                                               Seq(true.B, true.B, true.B)
                                           )))
+    axi_xbar.reset := reset_sync.io.output.asBool
     val err_slave = Module(new ErrSlave(DATA_WIDTH = 128, ADDR_WIDTH = 32, ID_WIDTH = 8))
+    err_slave.reset := reset_sync.io.output.asBool
+
+    cpu_reset_out := cpu.io.debug_resetOut
 
     cpu.io.iBus_cmd_ready := icache.io.frontend.request.ready
     cpu.io.iBus_rsp_valid := icache.io.frontend.response.valid
     cpu.io.iBus_rsp_payload_error := icache.io.frontend.response.bits.error
     cpu.io.iBus_rsp_payload_inst := icache.io.frontend.response.bits.data
-    cpu.io.timerInterrupt := false.B
-    cpu.io.externalInterrupt := false.B
-    cpu.io.softwareInterrupt := false.B
+    cpu.io.timerInterrupt := register_file.io.output(2)(0)
+    cpu.io.externalInterrupt := register_file.io.output(2)(1)
+    cpu.io.softwareInterrupt := register_file.io.output(2)(2)
     cpu.io.debug_bus_cmd_valid := false.B
     cpu.io.debug_bus_cmd_payload_wr := false.B
     cpu.io.debug_bus_cmd_payload_address := 0.U
@@ -184,12 +189,12 @@ class top(val params: Parameters) extends Module {
     cpu.io.dBus_rsp_ready := dcache.io.frontend.response.valid
     cpu.io.dBus_rsp_error := dcache.io.frontend.response.bits.error
     cpu.io.dBus_rsp_data := dcache.io.frontend.response.bits.data
-    cpu.io.clk := (io.cpu_clock.asBool && register_file.io.output(2)(1)).asClock
-    cpu.io.reset := cpu_reset_sync.io.output.asBool || register_file.io.output(2)(0)
+    cpu.io.clk := io.cpu_clock
+    cpu.io.reset := cache_reset_sync.io.output.asBool
     cpu.io.debugReset := cpu_reset_sync.io.output.asBool
 
     icache.clock := io.cpu_clock
-    icache.reset := cpu_reset_sync.io.output.asBool || register_file.io.output(2)(0)
+    icache.reset := cache_reset_sync.io.output.asBool
     icache.io.frontend.request.valid := cpu.io.iBus_cmd_valid
     icache.io.frontend.request.bits.write := false.B
     icache.io.frontend.request.bits.address := cpu.io.iBus_cmd_payload_pc
@@ -197,7 +202,7 @@ class top(val params: Parameters) extends Module {
     icache.io.frontend.request.bits.size := 0.U
 
     dcache.clock := io.cpu_clock
-    dcache.reset := cpu_reset_sync.io.output.asBool || register_file.io.output(2)(0)
+    dcache.reset := cache_reset_sync.io.output.asBool
     dcache.io.frontend.request.valid := cpu.io.dBus_cmd_valid
     dcache.io.frontend.request.bits.write := cpu.io.dBus_cmd_payload_wr
     dcache.io.frontend.request.bits.address := cpu.io.dBus_cmd_payload_address
@@ -209,13 +214,18 @@ class top(val params: Parameters) extends Module {
     dcache_fifo.io.S_AXI_clock := io.cpu_clock
     dcache_fifo.io.M_AXI_clock := clock
 
-    icache_fifo.reset := reset_sync.io.output.asBool || cpu_reset_sync.io.output.asBool || register_file.io.output(2)(0)
-    dcache_fifo.reset := reset_sync.io.output.asBool || cpu_reset_sync.io.output.asBool || register_file.io.output(2)(0)
+    icache_fifo.reset := reset_sync.io.output.asBool || cache_reset_sync.io.output.asBool
+    dcache_fifo.reset := reset_sync.io.output.asBool || cache_reset_sync.io.output.asBool
     icache.io.backend <> icache_fifo.io.S_AXI
     dcache.io.backend <> dcache_fifo.io.S_AXI
 
-    network.clock := clock
-    network.reset := reset_sync.io.output.asBool
+    uart.io.uart_clock := io.uart_clock
+
+    uart.io.uart.rx.serial <> io.uart.rx
+    io.uart.tx <> uart.io.uart.tx.serial
+    uart_axi.io.tx <> uart.io.uart.tx.data
+    uart_axi.io.rx <> uart.io.uart.rx.data
+
     network.io.ethernet_clock := io.ethernet_clock
     network.io.ethernet_clock_90 := io.ethernet_clock_90
     network.io.ethernet_reset := ethernet_reset_sync.io.output.asBool

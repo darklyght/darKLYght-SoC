@@ -301,7 +301,7 @@ void print_tcp_packet(char* buffer, int size) {
     printf("Data Payload\n");	
     print_data(buffer + header_size , size - header_size);
                         
-    printf("\n###########################################################");
+    printf("\n###########################################################\n");
 }
 
 void print_udp_packet(char* buffer, int size) {
@@ -327,7 +327,7 @@ void print_udp_packet(char* buffer, int size) {
     printf("Data Payload\n");	
     print_data(buffer + header_size, size - header_size);
     
-    printf("\n###########################################################");
+    printf("\n###########################################################\n");
 }
 
 void print_icmp_packet(char* buffer, int size) {
@@ -361,7 +361,7 @@ void print_icmp_packet(char* buffer, int size) {
     printf("Data Payload\n");	
     print_data(buffer + header_size, (size - header_size));
     
-    printf("\n###########################################################");
+    printf("\n###########################################################\n");
 }
 
 void print_data(char* data , int size) {
